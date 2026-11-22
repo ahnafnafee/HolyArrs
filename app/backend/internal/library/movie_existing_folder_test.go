@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	domain "github.com/HolyArrs/holyarrs/app/backend/internal/core/model"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/metadata"
@@ -68,5 +69,28 @@ func TestPlanAdoptCaseOnlyFolderOnCaseSensitiveDisk(t *testing.T) {
 		if (c.Status == "in_library") != (c.Folder == "Élément Perturbateur (2023)") {
 			t.Fatalf("%q status %q", c.Folder, c.Status)
 		}
+	}
+}
+
+func TestAddMovieWhileImporterHoldsFileLock(t *testing.T) {
+	s := open(t)
+	lf := addFolder(t, s)
+	movie := metadata.Movie{Name: "New Movie", Year: 2026, IDs: map[string]string{"tmdb": "437001"}, CollectionKnown: true}
+	unlock := s.LockFiles()
+	added := make(chan error, 1)
+	go func() {
+		_, err := AddMovie(context.Background(), s, movie, AddOptions{LibraryFolderID: lf.ID}, nil, now, domain.System)
+		added <- err
+	}()
+	select {
+	case err := <-added:
+		unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		unlock()
+		<-added
+		t.Fatal("adding a movie waited for the importer's file lock")
 	}
 }

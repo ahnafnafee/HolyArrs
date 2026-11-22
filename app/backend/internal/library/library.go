@@ -254,8 +254,13 @@ func AddMovie(ctx context.Context, s *database.Store, m metadata.Movie, opt AddO
 	if GateOpen(driver, opens, now) {
 		state = mediafiles.SlotWanted
 	}
-	unlock := s.LockFiles()
-	defer unlock()
+	// File adoption and collection removal must see a stable set of files
+	// and collection members. A new standalone movie only needs the database writer.
+	joinsCollection := m.CollectionKnown && m.Collection != nil
+	if opt.Adopt != nil || joinsCollection {
+		unlock := s.LockFiles()
+		defer unlock()
+	}
 	var titleID int64
 	err = s.Write(ctx, func(tx *sql.Tx) error {
 		if id, err := TitleByTMDB(ctx, tx, tmdbID); err != nil {
@@ -286,8 +291,10 @@ func AddMovie(ctx context.Context, s *database.Store, m metadata.Movie, opt AddO
 		if _, err := database.Insert(tx, "titles", t, by); err != nil {
 			return err
 		}
-		if err := syncMovieCollection(ctx, tx, t.ID, m); err != nil {
-			return err
+		if joinsCollection {
+			if err := syncMovieCollection(ctx, tx, t.ID, m); err != nil {
+				return err
+			}
 		}
 		it := &mediafiles.Item{TitleID: t.ID, Kind: "movie", KeepUpToDate: keep}
 		if m.Runtime > 0 {
