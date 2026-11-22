@@ -1,5 +1,7 @@
 <script lang="ts">
 	// Releases found for an episode, season or album, with pick and turn down actions.
+	import { untrack } from 'svelte';
+	import ReleaseSearchForm from './ReleaseSearchForm.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import { chooseWarnings, facts, keyReasons, pager, verdict, verdictTone } from './releases.ts';
 	import type { ReleaseScope as Scope } from './releases.ts';
@@ -15,13 +17,14 @@
 
 	let {
 		titleId,
+		searchHint = '',
 		scope,
 		jobs = [],
 		music = false,
 		bare = false,
 		onclose,
 		onchange
-	}: { titleId: number; scope: Scope; jobs?: number[]; music?: boolean; bare?: boolean; onclose: () => void; onchange: () => void } = $props();
+	}: { titleId: number; searchHint?: string; scope: Scope; jobs?: number[]; music?: boolean; bare?: boolean; onclose: () => void; onchange: () => void } = $props();
 
 	// Rows per page.
 	const limit = 25;
@@ -31,6 +34,9 @@
 	let offset = $state(0);
 	let running = $state<number[]>([]);
 	let loaded = $state(false);
+	let searching = $state(false);
+	let selectedJobs = $state<number[]>([]);
+	let request = 0;
 	let chooseDialog: HTMLDialogElement | undefined = $state();
 	let turnDialog: HTMLDialogElement | undefined = $state();
 	let target = $state<ReleaseView | null>(null);
@@ -51,7 +57,8 @@
 		void scope.query;
 		offset = 0;
 		running = [...jobs];
-		void load();
+		selectedJobs = scope.slotId && !music ? [...jobs] : [];
+		untrack(() => void load());
 	});
 
 	$effect(() => {
@@ -70,10 +77,41 @@
 		return () => offs.forEach((off) => off());
 	});
 
+	$effect(() => {
+		if (!selectedJobs.length || !running.length) return;
+		const interval = setInterval(load, 3000);
+		return () => clearInterval(interval);
+	});
+
+	async function search(query: string) {
+		const oldScope = scope;
+		searching = true;
+		try {
+			const r = await api.post<{ job_ids: number[] }>(`/titles/${titleId}/search`, { slot_id: scope.slotId, choose: false, query });
+			if (scope !== oldScope) return;
+			selectedJobs = r.job_ids;
+			running = r.job_ids;
+			offset = 0;
+			releases = [];
+			total = 0;
+			await load();
+		} catch (e) {
+			toasts.push(t('mediafiles.title.startFailed'), 'fail', { body: message(e) });
+		} finally {
+			searching = false;
+		}
+	}
+
 	// Running ids are trimmed to the ones the server still lists.
 	async function load() {
+		const id = ++request;
 		try {
-			const p = await api.get<ReleasePage>(`/titles/${titleId}/releases?${scope.query}&limit=${limit}&offset=${offset}`);
+			const params = new URLSearchParams(scope.query);
+			params.set('limit', String(limit));
+			params.set('offset', String(offset));
+			if (selectedJobs.length) params.set('jobs', selectedJobs.join(','));
+			const p = await api.get<ReleasePage>(`/titles/${titleId}/releases?${params}`);
+			if (id !== request) return;
 			releases = p.releases;
 			total = p.total;
 			const still = p.running_job_ids ?? [];
@@ -156,6 +194,9 @@
 		<h2 id="h-show-rel" class="h2">{t('mediafiles.showReleases.chooseFor', { label: scope.label })}</h2>
 		{#if !bare}<Button variant="plain" onclick={onclose}>{t('shows.page.close')}</Button>{/if}
 	</div>
+	{#if scope.slotId && !music}
+		{#key scope.slotId}<ReleaseSearchForm hint={searchHint} busy={searching || running.length > 0} onsearch={search} />{/key}
+	{/if}
 	{#if total}<p class="xs muted">{t('mediafiles.showReleases.found', { n: total })}</p>{/if}
 	<p class="small muted" aria-live="polite" data-testid="search-running">
 		{running.length ? t('mediafiles.showReleases.searching') : ''}

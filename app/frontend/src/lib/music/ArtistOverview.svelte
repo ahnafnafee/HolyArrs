@@ -28,6 +28,7 @@
 	import { SkRail, SkRowTitle, SkTrackRow } from '#lib/ui/sk/index.ts';
 	import { paintWindow, sampleCover, tintOf, unpaintWindow } from './album-tint.ts';
 	import { gapWaits, keepShown, reaskWhileIncomplete } from './reask.ts';
+	import { lookupArtist, variousArtistsMbid } from './artist-lookup.ts';
 	import GapNotice from './GapNotice.svelte';
 	import { albumYear } from './labels.ts';
 	import { releaseWords } from './music-trending.ts';
@@ -72,6 +73,7 @@
 	let fromCache = $state(false);
 	let leave: AbortController | null = null;
 	let lookup = $state<LookupArtist | null>(null);
+	let lookupBusy = $state(false);
 	let art = $state<{ logo?: string; backgrounds?: string[]; thumb?: string }>({});
 	let following = $state<boolean | null>(null);
 	// Covers that failed to load show the shared placeholder.
@@ -95,6 +97,20 @@
 		artistTab = 'library';
 		await tick();
 		document.querySelector('[data-testid="artist-tabs"]')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+	}
+
+	async function readArtist(id: string, signal: AbortSignal) {
+		lookupBusy = true;
+		try {
+			const result = await lookupArtist(id, signal);
+			if (signal.aborted) return;
+			lookup = result;
+			asked = new Set((result?.ask?.albums ?? []).map((a) => a.mbid));
+		} catch {
+			if (!signal.aborted) lookup = null;
+		} finally {
+			if (!signal.aborted) lookupBusy = false;
+		}
 	}
 
 	function load() {
@@ -151,11 +167,8 @@
 			}).catch(() => want === mbid && left.length && setTimeout(() => want === mbid && askArt(left.slice(1)), left[0]));
 		};
 		askArt(ART_RETRY);
-		void api.get<{ artists: LookupArtist[] }>(`/artists/lookup?term=${encodeURIComponent(`mbid:${want}`)}`).then((r) => {
-			if (want !== mbid) return;
-			lookup = r.artists[0] ?? null;
-			asked = new Set((lookup?.ask?.albums ?? []).map((a) => a.mbid));
-		}).catch(() => {});
+		lookupBusy = false;
+		if (want !== variousArtistsMbid && (manage || mayAsk)) void readArtist(want, stop.signal);
 		void Promise.allSettled([coreAsk, fullAsk]).then(([c, f]) => {
 			if (want !== mbid) return;
 			busy = false;
@@ -459,7 +472,13 @@
 		<ActionButton icon="library" label={t('music.openInLibrary')} primary href={to(`/library/${titleId}`)} />
 
 	{:else if manage || mayAsk}
-		<ActionButton icon={lookup?.ask ? 'check' : 'plus'} label={cta} primary disabled={!!lookup?.ask || !lookup} onclick={() => askAlbum()} data-testid="artist-ask" />
+		{#if mbid === variousArtistsMbid}
+			<p role="status">{t('music.variousArtistsCredit')}</p>
+		{:else if !lookup && !lookupBusy}
+			<ActionButton icon="refresh" label={t('music.retryArtistLookup')} primary onclick={() => leave && void readArtist(mbid, leave.signal)} data-testid="artist-ask" />
+		{:else}
+			<ActionButton icon={lookup?.ask ? 'check' : 'plus'} label={cta} primary disabled={!!lookup?.ask || !lookup} busy={lookupBusy} onclick={() => askAlbum()} data-testid="artist-ask" />
+		{/if}
 	{/if}
 {/snippet}
 

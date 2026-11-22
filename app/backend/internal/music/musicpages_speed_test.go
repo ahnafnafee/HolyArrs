@@ -115,6 +115,27 @@ func TestMusicPagesSlowSourceIncomplete(t *testing.T) {
 	}
 }
 
+func TestCompilationTracksWithoutArtistCatalog(t *testing.T) {
+	srv, _, lib, fa := musicSetup(t)
+	release := make(chan struct{})
+	close(release)
+	source := &slowArtists{ArtistProvider: fa, release: release}
+	lib.Artists = source
+
+	resp, body, _ := getTimed(t, srv.URL+"/api/v1/music/albums/"+apiAlbum+"?artist="+variousArtistsMBID)
+	var album AlbumPageView
+	if err := json.Unmarshal(body, &album); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK || album.Incomplete || album.Name != "First Light" ||
+		album.Artist.MBID != variousArtistsMBID || album.Artist.Name != "Various Artists" || len(album.Tracks) != 2 {
+		t.Fatalf("compilation page: %d %s", resp.StatusCode, body)
+	}
+	if got := source.artists.Load(); got != 0 {
+		t.Fatalf("compilation looked up the artist catalog %d times", got)
+	}
+}
+
 // A failing music source answers 200 incomplete, never 502.
 func TestMusicPagesFailingSourceNo502(t *testing.T) {
 	srv, _, lib, fa := musicSetup(t)

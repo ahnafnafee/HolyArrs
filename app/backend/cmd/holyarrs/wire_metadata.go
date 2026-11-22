@@ -16,7 +16,7 @@ import (
 // ownMusic is MusicBrainz asked directly. It answers only in Your own keys
 // mode (the metadata server answers in its own mode, and off asks nothing);
 // HOLYARRS_DIRECT_SOURCES=1 (developers only) keeps it on in every mode.
-func ownMusic(s *database.Store, version string, hosted *metadata.Hosted) metadata.ArtistProvider {
+func ownMusic(s *database.Store, version string, hosted *metadata.Hosted) *metadata.MusicBrainz {
 	mb := musicSource(s, version)
 	if !directSources() {
 		mb.Allowed = hosted.Modes.Direct

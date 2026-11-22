@@ -324,10 +324,12 @@ func latestSearchJobs(ctx context.Context, db *sql.DB, titleID int64, filters []
 	rows, err := db.QueryContext(ctx, `SELECT max(job_id) FROM (
 		SELECT s.id AS slot, r.job_id AS job_id FROM releases r JOIN json_each(r.matched_slot_ids) j
 			JOIN slots s ON s.id = j.value JOIN items i ON i.id = s.item_id
-			WHERE i.title_id = ? AND r.job_id IS NOT NULL AND r.found_by != 'feed'`+slotFilterSQL+`
+			JOIN jobs jb ON jb.id = r.job_id
+			WHERE i.title_id = ? AND r.found_by != 'feed' AND json_extract(jb.params, '$.release_query') IS NULL`+slotFilterSQL+`
 		UNION ALL
 		SELECT s.id, jb.id FROM jobs jb JOIN slots s ON s.id = json_extract(jb.subject, '$.id') JOIN items i ON i.id = s.item_id
-			WHERE jb.kind = ? AND json_extract(jb.subject, '$.type') = 'slot' AND i.title_id = ?`+slotFilterSQL+`
+			WHERE jb.kind = ? AND json_extract(jb.subject, '$.type') = 'slot' AND i.title_id = ?
+			AND json_extract(jb.params, '$.release_query') IS NULL`+slotFilterSQL+`
 			AND EXISTS (SELECT 1 FROM releases r WHERE r.job_id = jb.id)
 		UNION ALL
 		SELECT s.id, jb.id FROM jobs jb JOIN items i ON i.part_id = json_extract(jb.subject, '$.id')
@@ -348,6 +350,41 @@ func latestSearchJobs(ctx context.Context, db *sql.DB, titleID int64, filters []
 		jobIDs = append(jobIDs, id)
 	}
 	return jobIDs, nil
+}
+
+// titleSearchJobs restricts an explicit search to the title and slot scope.
+func titleSearchJobs(ctx context.Context, db *sql.DB, titleID int64, filters []slotFilter, ids []any) ([]any, []int64, error) {
+	in := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	scope := "i.title_id = ?"
+	scopeArgs := []any{titleID}
+	for _, f := range filters {
+		scope += f.cond
+		scopeArgs = append(scopeArgs, f.id)
+	}
+	args := append(ids, jobs.KindSearchSlot)
+	args = append(args, scopeArgs...)
+	args = append(args, jobs.KindSearchSeason, jobs.KindSearchAlbum)
+	args = append(args, scopeArgs...)
+	js, err := database.Select[domain.Job](ctx, db, "jobs", "id IN ("+in+") AND ("+`
+		kind = ? AND json_extract(subject, '$.type') = 'slot' AND EXISTS (
+			SELECT 1 FROM slots s JOIN items i ON i.id = s.item_id
+			WHERE s.id = json_extract(jobs.subject, '$.id') AND `+scope+`)
+		OR kind IN (?, ?) AND json_extract(subject, '$.type') = 'part' AND EXISTS (
+			SELECT 1 FROM slots s JOIN items i ON i.id = s.item_id
+			WHERE i.part_id = json_extract(jobs.subject, '$.id')
+				AND s.version_id = json_extract(jobs.params, '$.version_id') AND `+scope+"))", args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	selected := make([]any, 0, len(js))
+	running := []int64{}
+	for _, j := range js {
+		selected = append(selected, j.ID)
+		if j.State == "queued" || j.State == "running" {
+			running = append(running, j.ID)
+		}
+	}
+	return selected, running, nil
 }
 
 // releasesOfJobs counts the Releases the Jobs found and returns one page of

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/jobs"
@@ -162,7 +163,29 @@ func (h *Handlers) titleReleases(w http.ResponseWriter, r *http.Request) {
 		}
 		filters = append(filters, slotFilter{cond: f.cond, id: id})
 	}
-	jobIDs, err := latestSearchJobs(r.Context(), db, t.ID, filters)
+	var jobIDs []any
+	var running []int64
+	var err error
+	if query := r.URL.Query().Get("jobs"); query != "" {
+		parts := strings.Split(query, ",")
+		if len(parts) > 100 {
+			webserver.Fail(w, http.StatusBadRequest, "too many search jobs")
+			return
+		}
+		ids := make([]any, len(parts))
+		for i, part := range parts {
+			id, parseErr := strconv.ParseInt(part, 10, 64)
+			if parseErr != nil || id <= 0 {
+				webserver.Fail(w, http.StatusBadRequest, "jobs must contain search job IDs")
+				return
+			}
+			ids[i] = id
+		}
+		jobIDs, running, err = titleSearchJobs(r.Context(), db, t.ID, filters, ids)
+	} else {
+		jobIDs, err = latestSearchJobs(r.Context(), db, t.ID, filters)
+		running = runningSearchJobs(r.Context(), db, t.ID)
+	}
 	if err != nil {
 		webserver.Internal(w, "sources", err)
 		return
@@ -181,8 +204,6 @@ func (h *Handlers) titleReleases(w http.ResponseWriter, r *http.Request) {
 		}
 		h.named(r.Context(), out)
 	}
-	// Searches of this Title still running, so a screen can wait for them.
-	running := runningSearchJobs(r.Context(), db, t.ID)
 	webserver.WriteJSON(w, http.StatusOK, map[string]any{"releases": out, "total": total, "limit": n, "offset": off, "running_job_ids": running})
 }
 

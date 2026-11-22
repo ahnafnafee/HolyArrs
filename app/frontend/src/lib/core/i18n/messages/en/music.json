@@ -355,6 +355,8 @@
 	"music.save": "Save",
 	"music.stillReadingArtist": "Still reading artist",
 	"music.tryAgainInA": "Try again in a moment",
+	"music.retryArtistLookup": "Retry artist lookup",
+	"music.variousArtistsCredit": "Various Artists is a compilation credit. Search for an individual performer to add them to your library.",
 	"music.couldnTSendRequest": "Couldn't send request",
 	"music.openInLibrary": "Open in Library",
 	"music.addArtist": "Add artist",

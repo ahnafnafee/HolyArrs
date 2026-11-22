@@ -34,6 +34,7 @@
 	import { ReportSheet } from '#lib/requests/index.ts';
 	import { percent, timeLeft, groupLabel, kindTone } from '#lib/downloads/index.ts';
 	import { SubtitlePanel } from '#lib/subtitles/index.ts';
+	import ReleaseSheet from '#lib/mediafiles/ReleaseSheet.svelte';
 	import { ShowPage } from '#lib/shows/index.ts';
 	import { ArtistPage } from '#lib/music/index.ts';
 	import { TitlePage } from '#lib/discover/index.ts';
@@ -81,6 +82,11 @@
 	let running = $state<number[]>([]);
 	/** The Slot whose Releases are shown; 0 shows every Version. */
 	let slotPick = $state(0);
+	let releaseSheetOpen = $state(false);
+	const releaseScope = $derived(slotPick ? {
+		label: title?.slots.find((s) => s.id === slotPick)?.version || tr('movies.versions.main'),
+		query: `slot_id=${slotPick}`, body: { slot_id: slotPick }
+	} : null);
 	const pages = $derived(pager(relTotal, relLimit, relOffset));
 	let notFound = $state(false);
 	let blocked = $state(false);
@@ -457,6 +463,10 @@
 							<span class="hint">{tr('library.title.slotHint')}</span>
 						</div>
 					{/if}
+					<div>
+						<Button size="sm" icon="search" onclick={() => (releaseSheetOpen = true)}>{tr('mediafiles.releaseSheet.searchReleases')}</Button>
+					</div>
+					<ReleaseSheet bind:open={releaseSheetOpen} titleId={title.id} name={title.name} scope={releaseScope} onchosen={() => void load()} />
 					<p class="small muted" aria-live="polite" data-testid="search-running">
 						{running.length ? tr('mediafiles.showReleases.searching') : ''}
 					</p>

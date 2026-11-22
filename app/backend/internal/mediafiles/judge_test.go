@@ -360,3 +360,28 @@ func TestGateSeedersAndTurnedDown(t *testing.T) {
 		}
 	}
 }
+
+func TestTrustedWebRipStillUsesQualityAndSizeRules(t *testing.T) {
+	t.Setenv("HOLYARRS_WEBRIP_GROUPS", "MeGusta")
+	name := "Example.Show.S02E10.720p.HEVC.x265-MeGusta"
+	rel := ReleaseFacts{Name: name, Parse: releasename.Parse(name, releasename.Hints{Show: true}), Size: 220 << 20}
+	set := SlotSet{
+		Match:   Match{Title: &TitleRef{ID: 1, Name: "Example Show", OriginalLanguage: "en"}, Conf: releasename.Sure},
+		SlotIDs: []int64{1}, RuntimeMinutes: 22, Out: true,
+	}
+	rules := GoodEveryday()
+	rules.SizeLimits["720p_web"] = SizeLimit{Min: 100 << 20, Max: 500 << 20}
+	if v := Judge(rel, set, rules); !v.Passed || v.Step == nil || v.Step.Name != "720p_web" {
+		t.Fatalf("trusted release did not qualify as 720p WEB: %+v", v.Reasons)
+	}
+
+	oversized := rel
+	oversized.Size = 800 << 20
+	if v := Judge(oversized, set, rules); v.Passed || !hasFail(v, "hard", "size") {
+		t.Fatalf("oversized trusted release escaped its size limit: %+v", v.Reasons)
+	}
+	rules.Steps[stepIndex(rules, "720p_web")].Allowed = false
+	if v := Judge(rel, set, rules); v.Passed || !hasFail(v, "step", "not_allowed") {
+		t.Fatalf("trusted release escaped a blocked quality tier: %+v", v.Reasons)
+	}
+}

@@ -165,6 +165,7 @@ export interface EpisodeSlot {
 	state_label: string;
 	reason?: string;
 	file_id?: number;
+	other_folder?: boolean;
 }
 
 export interface EpisodeView {

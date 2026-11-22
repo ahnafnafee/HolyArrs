@@ -49,7 +49,8 @@ type epSlot struct {
 	sl  *mediafiles.Slot
 	cur *mediafiles.Current
 	// kept means the episode, its season, the Version and the show are all kept up to date.
-	kept bool
+	kept            bool
+	otherFolderCopy bool
 	// soon means aired, or airing within a day, when season packs may be taken.
 	soon bool
 	// placeholder means a last episode with no air date after a season that
@@ -185,6 +186,13 @@ func (s *Searcher) loadShow(ctx context.Context, ti mediafiles.Title, ver mediaf
 	for i := range slots {
 		byItem[slots[i].ItemID] = &slots[i]
 	}
+	var covered map[int64]bool
+	if ver.IsMain {
+		covered, err = mediafiles.ShowEpisodesInOtherFolder(ctx, db, ver.ID)
+		if err != nil {
+			return set, err
+		}
+	}
 	soon := time.Now().Add(24 * time.Hour)
 	for _, it := range its {
 		e := epSlot{it: it, sl: byItem[it.ID]}
@@ -210,6 +218,8 @@ func (s *Searcher) loadShow(ctx context.Context, ti mediafiles.Title, ver mediaf
 		e.soon = it.AirDate != nil && !it.AirDate.After(soon)
 		e.kept = it.KeepUpToDate && ver.KeepUpToDate && ti.KeepUpToDate && (it.PartID == nil || partKept[*it.PartID])
 		if e.sl != nil {
+			e.otherFolderCopy = covered[e.sl.ID]
+			e.kept = e.kept && !e.otherFolderCopy
 			e.cur = currentOf(ctx, db, *e.sl, set.pr)
 		}
 		set.eps = append(set.eps, e)

@@ -14,7 +14,7 @@
 	import { followHint, followLabel, followPath, setFollow } from '#lib/ui/follow.ts';
 	import Menu, { type MenuItem } from '#lib/ui/Menu.svelte';
 	import { AskArtistDialog, AddArtistDialog } from '#lib/requests/index.ts';
-	import { albumYear, GapNotice, gapWaits, keepShown, noSongsLine, reaskWhileIncomplete, sameLists, sameTracks, TRACK_REASK_MS, trackListView, albumArtistFix, albumHref, appPicture, artistHref, musicLoadError, askAgainOnce, coreIfSlow, coverFor, withCover, kindWord, length, owned, type AlbumCoreData, type AlbumPageData, type PageAlbum, type PageArtist, type PageCredit, type PageTrack, paintWindow, sampleCover, tintOf, unpaintWindow } from '#lib/music/index.ts';
+	import { lookupArtist, variousArtistsMbid, albumYear, GapNotice, gapWaits, keepShown, noSongsLine, reaskWhileIncomplete, sameLists, sameTracks, TRACK_REASK_MS, trackListView, albumArtistFix, albumHref, appPicture, artistHref, musicLoadError, askAgainOnce, coreIfSlow, coverFor, withCover, kindWord, length, owned, type AlbumCoreData, type AlbumPageData, type PageAlbum, type PageArtist, type PageCredit, type PageTrack, paintWindow, sampleCover, tintOf, unpaintWindow } from '#lib/music/index.ts';
 	import type { LookupArtist, MusicSettings } from '#lib/music/index.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -39,6 +39,7 @@
 	let errorNet = $state(false);
 	let busy = $state(false);
 	let lookup = $state<LookupArtist | null>(null);
+	let lookupBusy = $state(false);
 	let coverIn = $state(false);
 	let folders = $state<LibraryFolder[]>([]);
 	let rules = $state<PickRulesView[]>([]);
@@ -59,10 +60,23 @@
 	const manage = $derived(session.can('manage_library'));
 	const mayAsk = $derived(session.can('ask'));
 
+	async function readArtist(id: string, signal: AbortSignal) {
+		lookupBusy = true;
+		try {
+			const result = await lookupArtist(id, signal);
+			if (!signal.aborted) lookup = result;
+		} catch {
+			if (!signal.aborted) lookup = null;
+		} finally {
+			if (!signal.aborted) lookupBusy = false;
+		}
+	}
+
 	function load() {
 		const want = `${mbid}|${artist}`;
 		const still = () => want === `${mbid}|${artist}`;
 		busy = true;
+		lookupBusy = false;
 		error = '';
 		leave?.abort();
 		const stop = (leave = new AbortController());
@@ -71,7 +85,9 @@
 		// All at once: the hero, the tracks, the similar artists and the ask state.
 		const fullRead = askAgainOnce(() => api.get<AlbumPageData>(full));
 		void fullRead.then((d) => {
-			if (!still()) return;
+			if (!still() || stop.signal.aborted) return;
+			const id = d.artist?.mbid;
+			if (id && id !== variousArtistsMbid && (manage || mayAsk) && !d.title_id) void readArtist(id, stop.signal);
 			// An incomplete answer is shown, then asked again quietly and merged in, keeping what is on screen.
 			void reaskWhileIncomplete(d, () => api.get<AlbumPageData>(full), (v, pending) => {
 				if (!still() || stop.signal.aborted) return;
@@ -87,7 +103,7 @@
 			}
 			// A bare album link learns its artist from the full answer: ask the nearby albums now.
 			const found = d.artist?.mbid;
-			if (!artist && found) void api.get<{ near: PageCredit[] }>(`/music/albums/${mbid}?part=near&artist=${found}`).then((r) => still() && (near = withCover(r.near))).catch(() => still() && (near = []));
+			if (!artist && found && found !== variousArtistsMbid) void api.get<{ near: PageCredit[] }>(`/music/albums/${mbid}?part=near&artist=${found}`).then((r) => still() && (near = withCover(r.near))).catch(() => still() && (near = []));
 		}).catch((e) => {
 			if (!still()) return;
 			({ text: error, network: errorNet } = musicLoadError(e, 'album'));
@@ -95,14 +111,11 @@
 			if (still()) busy = false;
 		});
 		// The quick core and nearby parts need the artist; a bare album link waits for the full answer instead. The full answer holds the core, so the quick core is asked only when the full one is slow.
-		if (artist) void coreIfSlow(fullRead, () => api.get<AlbumCoreData>(`/music/albums/${mbid}?part=core&artist=${artist}`)).then((c) => c && still() && !data && (core = c)).catch(() => {});
+		if (artist && artist !== variousArtistsMbid) void coreIfSlow(fullRead, () => api.get<AlbumCoreData>(`/music/albums/${mbid}?part=core&artist=${artist}`)).then((c) => c && still() && !data && (core = c)).catch(() => {});
 		// A bare album link has no artist: skip the artist calls instead of asking for /music/artists/.
-		if (!artist) similar = [];
+		if (!artist || artist === variousArtistsMbid) similar = [];
 		else void api.get<{ similar: PageArtist[] }>(`/music/artists/${artist}?part=similar&n=14`).then((r) => still() && (similar = withCover(r.similar))).catch(() => still() && (similar = []));
-		if (artist) void api.get<{ near: PageCredit[] }>(`/music/albums/${mbid}?part=near&artist=${artist}`).then((r) => still() && (near = withCover(r.near))).catch(() => still() && (near = []));
-		if (artist) void api.get<{ artists: LookupArtist[] }>(`/artists/lookup?term=${encodeURIComponent(`mbid:${artist}`)}`).then((r) => {
-			if (still()) lookup = r.artists[0] ?? null;
-		}).catch(() => {});
+		if (artist && artist !== variousArtistsMbid) void api.get<{ near: PageCredit[] }>(`/music/albums/${mbid}?part=near&artist=${artist}`).then((r) => still() && (near = withCover(r.near))).catch(() => still() && (near = []));
 	}
 
 	$effect(() => {
@@ -132,6 +145,7 @@
 	});
 
 	const hero = $derived<AlbumCoreData | null>(data ?? core);
+	const compilationCredit = $derived(hero?.artist.mbid === variousArtistsMbid);
 	// A cover the server has not stored yet is asked for again while the page is open (20 s, 70 s, 150 s) and swaps in once stored; until then the placeholder shows.
 	const COVER_RETRY = [20000, 70000, 150000];
 	let coverTry = $state(0);
@@ -241,7 +255,10 @@
 
 	function act() {
 		if (titleId) return void goto(to(data?.part_id ? `/library/${titleId}/albums/${data.part_id}` : `/library/${titleId}`));
-		if (!lookup) return void toasts.push(t('music.stillReadingArtist'), 'fail', { body: t('music.tryAgainInA') });
+		if (!lookup) {
+			if (hero && leave && !lookupBusy) void readArtist(hero.artist.mbid, leave.signal);
+			return;
+		}
 		if (manage) addDialog?.open(lookup);
 		else if (edition) void askEdition();
 		else askDialog?.open(lookup, mbid);
@@ -252,7 +269,7 @@
 		if (asking || !lookup) return;
 		asking = true;
 		try {
-			const r = await api.post<{ ask: Ask; joined: boolean }>('/asks', { kind: 'artist', id: `mbid:${artist}`, albums: [mbid], editions: { [mbid]: edition } });
+			const r = await api.post<{ ask: Ask; joined: boolean }>('/asks', { kind: 'artist', id: `mbid:${lookup.mbid}`, albums: [mbid], editions: { [mbid]: edition } });
 			onAsked(lookup, r);
 		} catch (e) {
 			toasts.push(t('music.couldnTSendRequest'), 'fail', { body: message(e) });
@@ -271,7 +288,7 @@
 
 </script>
 
-<svelte:head><title>{hero?.name ?? t('music.album')} · HolyArrs</title>{#if heroCover}<link rel="preload" as="image" href={heroCover} />{/if}</svelte:head>
+<svelte:head><title>{hero?.name || t('music.album')} · HolyArrs</title>{#if heroCover}<link rel="preload" as="image" href={heroCover} />{/if}</svelte:head>
 
 {#snippet albumCard(a: PageAlbum)}
 	{@const c = coverFor(appPicture(a.image), 200)}
@@ -288,19 +305,25 @@
 					{#if cover && !coverFailed}<img src={heroCover} alt={t('music.cover', { name: hero.name })} width="320" height="320" decoding="async" fetchpriority="high" onload={coverLoaded} onerror={() => { coverIn = false; coverFailed = true; }} />{:else}<ArtPlaceholder name={hero.name} shape="square" color={coverTint} />{/if}
 				</div>
 				<div class="words">
-					<h1>{hero.name}{#if data?.explicit}<span class="e big" aria-label={t('music.explicit')}>E</span>{/if}</h1>
-					<a class="by" href={artistHref(hero.artist.mbid)}>{hero.artist.name}</a>
+					<h1>{hero.name || t('music.album')}{#if data?.explicit}<span class="e big" aria-label={t('music.explicit')}>E</span>{/if}</h1>
+					{#if compilationCredit}<span class="by">{hero.artist.name}</span>
+					{:else}<a class="by" href={artistHref(hero.artist.mbid)}>{hero.artist.name}</a>{/if}
 					<p class="meta">{[kindWord(hero), albumYear(hero.release_date)].filter(Boolean).join(' · ')}</p>
 					{#if hero.disambiguation}<p class="blurb">{hero.disambiguation}</p>{/if}
 					<div class="actions">
-						<ActionButton icon="user" label={t('music.goTo', { name: hero.artist.name })} caption={t('music.artist')} href={artistHref(hero.artist.mbid)} />
-						{#if titleId || manage || mayAsk}
-							<ActionButton primary icon={titleId ? 'library' : asked ? 'check' : 'plus'} label={cta} disabled={!titleId && (asked || !lookup || asking)} busy={asking} onclick={act} data-testid="album-ask" />
-						{:else}
+						{#if !compilationCredit}<ActionButton icon="user" label={t('music.goTo', { name: hero.artist.name })} caption={t('music.artist')} href={artistHref(hero.artist.mbid)} />{/if}
+						{#if titleId || (!compilationCredit && (manage || mayAsk))}
+							{#if !titleId && !lookup && !lookupBusy && !busy}
+								<ActionButton primary icon="refresh" label={t('music.retryArtistLookup')} onclick={act} data-testid="album-ask" />
+							{:else}
+								<ActionButton primary icon={titleId ? 'library' : asked ? 'check' : 'plus'} label={cta} disabled={!titleId && (asked || !lookup || asking)} busy={asking || lookupBusy} onclick={act} data-testid="album-ask" />
+							{/if}
+						{:else if !compilationCredit}
 							<ActionButton primary icon="user" label={t('music.openArtist')} href={artistHref(hero.artist.mbid)} />
 						{/if}
 						{#if titleId}<ActionButton icon="bell" label={followLabel(following)} title={followHint('artist', following, false)} pressed={following} busy={followBusy} onclick={flipFollow} data-testid="follow" />{/if}
 					</div>
+					{#if compilationCredit && !titleId && (manage || mayAsk)}<p class="blurb">{t('music.variousArtistsCredit')}</p>{/if}
 					{#if status && data}<span class="pill {status.state}" data-testid="album-state">{status.label}{#if data.part_id && data.tracks.length}{t('music.ofTracks2', { have: haveCount, total: data.tracks.length })}{/if}</span>{/if}
 				</div>
 			</header>
@@ -311,9 +334,14 @@
 				</section>
 			{:else}
 				<section class="block" aria-label={t('music.tracks2')}>
-					{#if !data.tracks.length && data.gap}<GapNotice gap={data.gap} />
-					{:else if trackListView(data.tracks.length, reasking) === 'skeleton'}<div class="tracks" aria-busy="true" aria-label={t('music.loadingTheTracks')}>{#each Array.from({ length: 10 }, (_, i) => i) as i (i)}<SkTrackRow height={48} />{/each}</div>
-					{:else if trackListView(data.tracks.length, reasking) === 'gave-up'}<p class="note">{noSongsLine()}</p>{/if}
+					{#if !data.tracks.length}
+						{#if data.gap && (busy || reasking)}<GapNotice gap={data.gap} />
+						{:else if trackListView(data.tracks.length, busy || reasking) === 'skeleton'}<p class="note" role="status">{t('music.loadingTheTracks')}</p>
+						{:else}
+							<p class="note">{noSongsLine()}</p>
+							<ActionButton icon="refresh" pill label={t('ui.loadError.tryAgain')} onclick={load} />
+						{/if}
+					{/if}
 					{#if data.part_id && list.length}<p class="count" data-testid="album-have">{t('music.haveMissing', { have: haveCount, missing: missingCount })}</p>{/if}
 					{#each discs as [disc, tracks] (disc)}
 						{#if discs.length > 1}<h3 class="disc">{t('music.disc', { n: disc })}</h3>{/if}

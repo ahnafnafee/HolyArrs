@@ -47,7 +47,7 @@
 	let folders = $state<LibraryFolder[]>([]);
 	let downloads = $state<DownloadRow[]>([]);
 	let asks = $state<Ask[]>([]);
-	// Before setup: Explore's first picture rows (from the metadata server, no setup needed), read before Home shows.
+	// Before setup: fill the Explore rows from the metadata server.
 	let picks = $state<(ExploreRow & { wide: boolean; type: string })[]>([]);
 	// Art for the New & Popular and Calendar tiles, from New & Popular's first page (the same Kid-limited answer that page reads): its first new backdrop and the next releases' posters.
 	let tileArt = $state<{ pop: string[]; soon: string[]; week: { count: number; posters: string[] } }>({ pop: [], soon: [], week: { count: 0, posters: [] } });
@@ -149,7 +149,7 @@
 
 	async function loadHome() {
 		try {
-			home = await api.get<HomeAnswer>('/home');
+			home = await api.get<HomeAnswer>('/home', AbortSignal.timeout(10000));
 			failed = false;
 		} catch {
 			failed = true;
@@ -157,29 +157,25 @@
 	}
 
 	async function loadAll() {
-		// The first screen (the Home answer) loads now; the bigger asks wait until the sign-in hand-off has left, so its frames stay smooth.
-		// A fresh install waits for everything (its picture rows too), so nothing jumps in under the welcome card.
-		// The first visit keeps the loading screen until everything Home shows is there, pictures decoded, for 30 s at most; after that Home shows and the rest fills in as it arrives. With the metadata server down there is nothing to wait for: Home shows at once and fills in when it is back.
-		const homeRead = loadHome();
-		const art = (artReady ??= loadTileArt());
-		const picksRead = homeRead.then(() => (home?.rows?.includes('welcome') ? loadPicks() : undefined));
-		const ready = Promise.all([homeRead, checkMetadata()]).then(([, up]) => (up ? Promise.all([art, picksRead]).then(decoded) : undefined));
-		const first = Promise.race([ready, new Promise<void>((r) => {
-			const w = setTimeout(r, FIRST_WAIT);
-			endWait = () => (clearTimeout(w), r());
-		})]).then(() => {
-			if (home) loaded = true;
+		// Render Home as soon as its own data arrives. Art and status can fill in separately.
+		const homeRead = loadHome().then(() => {
+			loaded = true;
+			if (home?.rows?.includes('welcome')) void loadPicks();
 		});
+		void (artReady ??= loadTileArt());
+		void checkMetadata();
+
+		// Keep secondary requests out of the sign-in transition.
 		await afterHandoff();
-		const [, fo, dl, he, ch, as] = await Promise.allSettled([
-			first,
-			manager ? api.get<{ library_folders: LibraryFolder[] }>('/library-folders') : Promise.resolve(null),
+		const signal = AbortSignal.timeout(10000);
+		const [fo, dl, he, ch, as] = await Promise.allSettled([
+			manager ? api.get<{ library_folders: LibraryFolder[] }>('/library-folders', signal) : Promise.resolve(null),
 			// Members may only read the Library and their own asks; the rest needs manage_library.
-			manager ? api.get<{ downloads: DownloadRow[] }>(homeDownloadsURL) : Promise.resolve(null),
-			manager ? api.get<Health>('/health') : Promise.resolve(null),
+			manager ? api.get<{ downloads: DownloadRow[] }>(homeDownloadsURL, signal) : Promise.resolve(null),
+			manager ? api.get<Health>('/health', signal) : Promise.resolve(null),
 			// The checks need manage_library only; people without Settings get Status links instead of Fix.
-			manager ? api.get<HealthChecks>('/health/checks') : Promise.resolve(null),
-			canAsk ? api.get<{ asks: Ask[] }>('/asks') : Promise.resolve(null)
+			manager ? api.get<HealthChecks>('/health/checks', signal) : Promise.resolve(null),
+			canAsk ? api.get<{ asks: Ask[] }>('/asks', signal) : Promise.resolve(null)
 		]);
 		if (fo.status === 'fulfilled' && fo.value) folders = fo.value.library_folders;
 		if (dl.status === 'fulfilled' && dl.value) downloads = dl.value.downloads ?? [];
@@ -191,19 +187,16 @@
 		uncheckedParts = he.status === 'rejected';
 		uncheckedAsks = as.status === 'rejected';
 		uncheckedFolders = fo.status === 'rejected';
+		await homeRead;
 		now = new Date();
-		loaded = true;
 		settled = true;
 	}
 
-	// The longest the loading screen waits on the first visit.
-	const FIRST_WAIT = 30000;
 	// While Explore's lists are still being built (a fresh install, or a slow metadata server) an answer comes back empty and says so: ask again every few seconds, for two minutes at most.
 	const AGAIN_EVERY = 3000;
 	const AGAIN_FOR = 120000;
 	// Set once Home is left: the waits and the asking-again stop, so a left page is not kept alive by its timers.
 	let gone = false;
-	let endWait = () => {};
 	const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 	async function untilFull<T extends { building: boolean }>(read: () => Promise<T | null>, full: (v: T) => boolean, keep: (v: T) => void): Promise<void> {
 		const stop = Date.now() + AGAIN_FOR;
@@ -215,18 +208,6 @@
 			await pause(AGAIN_EVERY);
 		}
 	}
-	// The tiles' pictures, decoded at the size the tiles show them, so they paint with the grid.
-	function decoded(): Promise<unknown> {
-		const urls = [...tileArt.pop.map((b) => sized(b, 'backdrop')), ...tileArt.soon.slice(0, 3).map((p) => sized(p, 'poster', 400)), ...tileArt.week.posters.map((p) => sized(p, 'poster', 80)), ...(home?.soon ?? []).slice(0, 3).flatMap((c) => (c.poster ? [sized(c.poster, 'poster', 400), sized(c.poster, 'poster', 80)] : []))];
-		return Promise.all(
-			urls.map((u) => {
-				const img = new Image();
-				img.src = u;
-				return img.decode().catch(() => undefined);
-			})
-		);
-	}
-
 	// Read once per visit, asked again while it is empty.
 	let picksTried = false;
 	async function loadPicks() {
@@ -240,7 +221,7 @@
 		);
 	}
 
-	// Read once per visit with Home, so the tiles have their art when the grid first shows; asked again while New & Popular is still empty.
+	// Read tile art in the background, retrying while New & Popular is still being built.
 	let artReady: Promise<void> | undefined;
 	function loadTileArt(): Promise<void> {
 		return untilFull(
@@ -272,6 +253,7 @@
 	async function retry() {
 		retrying = true;
 		try {
+			if (failed) api.forget();
 			await loadAll();
 		} finally {
 			retrying = false;
@@ -330,7 +312,6 @@
 		const offs = [live.on('title', soonLoad), live.on('import', soonLoad), live.on('resync', soonLoad), live.on('health', soonLoad), live.on('ask', soonLoad), live.on('ask_removed', soonLoad), live.on('download', onDownload)];
 		return () => {
 			gone = true;
-			endWait();
 			clearTimeout(timer);
 			clearInterval(clock);
 			offs.forEach((off) => off());

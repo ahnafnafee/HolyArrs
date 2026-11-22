@@ -112,15 +112,15 @@ type SeasonCount struct {
 func SeasonCounts(ctx context.Context, q database.Lister, titleIDs []int64, now time.Time) ([]SeasonCount, error) {
 	at := database.FormatTime(now)
 	rows, err := q.QueryContext(ctx, `SELECT i.title_id, COALESCE(json_extract(i.numbers, '$.season'), 0) AS sn, count(*),
-		sum(s.file_id IS NOT NULL OR (i.keep_up_to_date = 1 AND i.air_date IS NOT NULL AND i.air_date <= ?)),
-		sum(s.file_id IS NOT NULL), COALESCE(sum(f.size), 0),
+		sum(f.id IS NOT NULL OR (i.keep_up_to_date = 1 AND i.air_date IS NOT NULL AND i.air_date <= ?)),
+		sum(f.id IS NOT NULL), COALESCE(sum(f.size), 0),
 		min(CASE WHEN i.keep_up_to_date = 1 AND i.air_date > ? THEN i.air_date END),
 		max(CASE WHEN i.keep_up_to_date = 1 AND i.air_date <= ? THEN i.air_date END),
 		COALESCE(group_concat(DISTINCT f.release_group), ''), max(CASE WHEN i.air_date <= ? THEN i.air_date END)
 		FROM items i
 		LEFT JOIN versions v ON v.title_id = i.title_id AND v.is_main = 1
 		LEFT JOIN slots s ON s.item_id = i.id AND s.version_id = v.id
-		LEFT JOIN files f ON f.id = s.file_id
+		LEFT JOIN files f ON f.id = COALESCE(s.file_id, `+mediafiles.ShowOtherFolderFileSQL+`)
 		WHERE i.kind = 'episode' AND i.dropped_at IS NULL AND i.title_id IN `+idTuple(titleIDs)+` GROUP BY i.title_id, sn`, at, at, at, at)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func MissingEpisodes(ctx context.Context, q MissingReader, kept bool, sortColumn
 	from := `FROM items i JOIN titles t ON t.id = i.title_id JOIN versions v ON v.title_id = i.title_id AND v.is_main = 1
 		JOIN slots s ON s.item_id = i.id AND s.version_id = v.id
 		WHERE i.kind = 'episode' AND i.dropped_at IS NULL AND t.kind = 'show' AND t.state != 'removed' AND s.state != 'removed'
-		AND s.file_id IS NULL AND i.air_date IS NOT NULL AND i.air_date <= ? AND ` + filter
+		AND s.file_id IS NULL AND ` + mediafiles.ShowOtherFolderFileSQL + ` IS NULL AND i.air_date IS NOT NULL AND i.air_date <= ? AND ` + filter
 	at := database.FormatTime(now)
 	var total int
 	if err := q.QueryRowContext(ctx, "SELECT count(DISTINCT i.id) "+from, at).Scan(&total); err != nil {
@@ -291,7 +291,8 @@ type OrderEpisodeRow struct {
 // OrderEpisodeRows reads every episode of a show with its release-name
 // season and the main Version's Slot state, in that season's order.
 func OrderEpisodeRows(ctx context.Context, q database.Lister, titleID int64) ([]OrderEpisodeRow, error) {
-	rows, err := q.QueryContext(ctx, `SELECT COALESCE(i.part_id, 0), COALESCE(json_extract(i.numbers, '$.alt_season'), 0) AS sn, i.air_date, COALESCE(i.air_day, ''), i.keep_up_to_date, COALESCE(s.state, ''), s.file_id IS NOT NULL FROM items i
+	rows, err := q.QueryContext(ctx, `SELECT COALESCE(i.part_id, 0), COALESCE(json_extract(i.numbers, '$.alt_season'), 0) AS sn, i.air_date, COALESCE(i.air_day, ''), i.keep_up_to_date, CASE WHEN s.file_id IS NULL AND `+mediafiles.ShowOtherFolderFileSQL+` IS NOT NULL THEN 'in_library' ELSE COALESCE(s.state, '') END,
+		`+mediafiles.ShowEpisodeHasFileSQL+` FROM items i
 		LEFT JOIN slots s ON s.item_id = i.id AND s.version_id = (SELECT id FROM versions WHERE title_id = ? ORDER BY is_main DESC, id LIMIT 1)
 		WHERE i.title_id = ? AND i.kind = 'episode' ORDER BY sn`, titleID, titleID)
 	if err != nil {

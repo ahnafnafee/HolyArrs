@@ -15,6 +15,9 @@ import (
 	"github.com/HolyArrs/holyarrs/app/backend/internal/metadata"
 )
 
+// MusicBrainz uses this credit for compilations without a single artist.
+const variousArtistsMBID = "89ad4ac3-39f7-470e-963a-56509c546377"
+
 func (h *Handlers) albumPage(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Query().Get("part") {
 	case "core":
@@ -57,37 +60,43 @@ func (h *Handlers) albumPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	by := time.Now().Add(musicPageWait)
+	compilation := artist == variousArtistsMBID
 	simDone := make(chan []PageArtist, 1)
-	go func() {
-		if r.URL.Query().Get("similar") == "0" {
-			simDone <- []PageArtist{}
-			return
-		}
-		simDone <- h.similarArtists(ctx, artist, 14)
-	}()
-	art, err, answered := WaitFlight[metadata.Artist](ctx, PageFlight(h, ctx, "album-artist:"+artist+"|"+mbid, func(ctx context.Context) (metadata.Artist, error) {
-		art, err := h.lib().Artists.Artist(metadata.QuickArtist(ctx, 1500*time.Millisecond), artist)
-		if err == nil && art.Partial && !hasAlbum(art, mbid) {
-			art, err = h.lib().Artists.Artist(metadata.WholeArtist(ctx), artist)
-		}
-		return art, err
-	}), by)
-	if errors.Is(err, metadata.ErrArtistNotFound) {
-		if h.albumWithRealArtist(ctx, w, r, mbid, artist) {
-			return
-		}
-		webserver.Fail(w, http.StatusNotFound, "We could not find this album.")
-		return
+	if compilation || r.URL.Query().Get("similar") == "0" {
+		simDone <- []PageArtist{}
+	} else {
+		go func() { simDone <- h.similarArtists(ctx, artist, 14) }()
 	}
-	// A slow or failing source never fails the page: the album is drawn
-	// from the names already kept and the page says it is incomplete.
-	incomplete := !answered || err != nil
-	if incomplete {
-		art = metadata.Artist{MBID: artist, Name: h.knownName("artist", artist)}
+	var artErr error
+	var incomplete bool
+	art := metadata.Artist{MBID: artist, Name: "Various Artists"}
+	if !compilation {
+		var answered bool
+		art, artErr, answered = WaitFlight[metadata.Artist](ctx, PageFlight(h, ctx, "album-artist:"+artist+"|"+mbid, func(ctx context.Context) (metadata.Artist, error) {
+			art, err := h.lib().Artists.Artist(metadata.QuickArtist(ctx, 1500*time.Millisecond), artist)
+			if err == nil && art.Partial && !hasAlbum(art, mbid) {
+				art, err = h.lib().Artists.Artist(metadata.WholeArtist(ctx), artist)
+			}
+			return art, err
+		}), by)
+		if errors.Is(artErr, metadata.ErrArtistNotFound) {
+			if h.albumWithRealArtist(ctx, w, r, mbid, artist) {
+				return
+			}
+			webserver.Fail(w, http.StatusNotFound, "We could not find this album.")
+			return
+		}
+		incomplete = !answered || artErr != nil
+		if incomplete {
+			art = metadata.Artist{MBID: artist, Name: h.knownName("artist", artist)}
+		}
 	}
 	side, cancel := context.WithTimeout(ctx, max(time.Until(by), musicSideFloor))
 	defer cancel()
-	dz := h.deezerProfile(side, artist, art)
+	var dz metadata.DeezerProfile
+	if !compilation {
+		dz = h.deezerProfile(side, artist, art)
+	}
 	albums, t, err := h.pageAlbums(ctx, r, art, dz)
 	if err != nil {
 		webserver.Internal(w, "api", err)
@@ -102,7 +111,7 @@ func (h *Handlers) albumPage(w http.ResponseWriter, r *http.Request) {
 			me = &albums[i]
 		}
 	}
-	if me == nil && incomplete {
+	if me == nil && (incomplete || compilation) {
 		x := PageAlbum{MBID: mbid, Name: h.knownName("album", mbid), SecondaryTypes: []string{}, Image: artPath("album", mbid), Shelf: "albums"}
 		me = &x
 	}
@@ -133,11 +142,19 @@ func (h *Handlers) albumPage(w http.ResponseWriter, r *http.Request) {
 		v.Incomplete = true
 		if len(ps) == 0 {
 			if v.Gap = gapOf(psErr); v.Gap == nil {
-				v.Gap = gapOf(err)
+				v.Gap = gapOf(artErr)
 			}
 		}
 	}
 	main := mainPressing(ps)
+	if compilation && main != nil {
+		if v.Name == "" {
+			v.Name = main.Name
+		}
+		if v.ReleaseDate == "" {
+			v.ReleaseDate = main.Date
+		}
+	}
 	// Deezer's album: label and explicit marks per track.
 	var dzInfo metadata.DeezerAlbumInfo
 	// The same name with the same words in brackets first, else the same base name.

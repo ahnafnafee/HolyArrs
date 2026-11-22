@@ -16,13 +16,14 @@ import (
 
 // EpisodeSlot is one episode in one Version.
 type EpisodeSlot struct {
-	ID         int64  `json:"id"`
-	Version    string `json:"version"`
-	VersionID  int64  `json:"version_id"`
-	State      string `json:"state"`
-	StateLabel string `json:"state_label"`
-	Reason     string `json:"reason,omitempty"`
-	FileID     *int64 `json:"file_id,omitempty"`
+	ID          int64  `json:"id"`
+	Version     string `json:"version"`
+	VersionID   int64  `json:"version_id"`
+	State       string `json:"state"`
+	StateLabel  string `json:"state_label"`
+	Reason      string `json:"reason,omitempty"`
+	FileID      *int64 `json:"file_id,omitempty"`
+	OtherFolder bool   `json:"other_folder,omitempty"`
 	// File is the episode's file (path, size, quality, media info), asked for with files=1.
 	File *mediafiles.File `json:"file,omitempty"`
 }
@@ -143,9 +144,13 @@ func (h *EpisodeHandlers) listEpisodes(w http.ResponseWriter, r *http.Request) {
 		webserver.Internal(w, "api", err)
 		return
 	}
-	label := map[int64]string{}
+	versions := map[int64]mediafiles.Version{}
+	var main mediafiles.Version
 	for _, v := range vs {
-		label[v.ID] = v.Label
+		versions[v.ID] = v
+		if v.IsMain {
+			main = v
+		}
 	}
 	slots, err := mediafiles.EpisodeSlotsOfTitle(r.Context(), db, t.ID)
 	if err != nil {
@@ -167,7 +172,9 @@ func (h *EpisodeHandlers) listEpisodes(w http.ResponseWriter, r *http.Request) {
 	byItem := map[int64][]EpisodeSlot{}
 	now := time.Now()
 	for _, s := range slots {
-		es := EpisodeSlot{ID: s.ID, Version: label[s.VersionID], VersionID: s.VersionID, State: string(s.State), StateLabel: h.StateLabels[s.State], FileID: s.FileID}
+		v := versions[s.VersionID]
+		other := mediafiles.OtherShowFolder(main, v)
+		es := EpisodeSlot{ID: s.ID, Version: v.Label, VersionID: s.VersionID, State: string(s.State), StateLabel: h.StateLabels[s.State], FileID: s.FileID, OtherFolder: other}
 		if s.FileID != nil {
 			es.File = files[*s.FileID]
 		}

@@ -88,6 +88,8 @@
 	let loaded = $state(false);
 	let cw = $state(0);
 	let second = $state(false);
+	let coverRetry = $state(0);
+	const coverRetryDelays = [5000, 15000, 40000];
 	// Open waits for a pause; close waits a beat so moving between card and tile does not flicker.
 	const opener = dwell(GROW_DELAY, () => {
 		if (scrollHold() || modalOpen()) return;
@@ -104,10 +106,33 @@
 	const more = $derived([typedWord, sub, owned?.label, status ? statusLabel : ''].filter(Boolean).join(', '));
 	const strip = $derived(progress === undefined ? shownFresh(fresh, { music, row }) : null);
 	const pic = $derived(second ? (fallback ?? null) : sized(image, 'poster', cw));
-	const shownPic = $derived(pic);
+	const albumCover = $derived(music && !!image?.startsWith('/') && image.includes('/api/v1/music-trending/art/album/'));
+	const shownPic = $derived(albumCover && coverRetry && !second && pic
+		? `${pic}${pic.includes('?') ? '&' : '?'}cover-retry=${coverRetry}`
+		: pic);
 	const asking = $derived(!!image && !failed && near() && cw > 0);
 	const tint = $derived(color ?? pictureOf(pic)?.color ?? null);
-	const gone = $derived(needsArt && (!image || failed));
+	const retryCover = $derived(albumCover && coverRetry < coverRetryDelays.length);
+	const gone = $derived(needsArt && (!image || (failed && !retryCover)));
+
+	$effect(() => {
+		void image;
+		failed = false;
+		loaded = false;
+		second = false;
+		coverRetry = 0;
+	});
+
+	// A cold cover can initially return an empty response while the server fetches it.
+	$effect(() => {
+		if (!failed || !retryCover) return;
+		const timer = setTimeout(() => {
+			coverRetry += 1;
+			second = false;
+			failed = false;
+		}, coverRetryDelays[coverRetry]);
+		return () => clearTimeout(timer);
+	});
 
 	$effect(() => () => shut());
 	$effect(() => {
@@ -173,6 +198,7 @@
 	}
 	// Music tiles try the fallback art once before giving up.
 	function broken() {
+		loaded = false;
 		if (music && fallback && !second) second = true;
 		else failed = true;
 	}

@@ -464,3 +464,30 @@ func TestServiceAlbumOneCallForPageViews(t *testing.T) {
 		t.Fatalf("%+v %v", ps, err)
 	}
 }
+
+func TestMemberPressingsFallsBackToMusicBrainz(t *testing.T) {
+	const edition = "aaaaaaaa-0000-4000-8000-000000000001"
+	const track = "bbbbbbbb-0000-4000-8000-000000000001"
+	const recording = "cccccccc-0000-4000-8000-000000000001"
+	s := testService(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/music/album/"+serviceAlbumID {
+			t.Errorf("asked %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"schema_version":1,"mbid":"` + serviceAlbumID + `","tracks":[]}`))
+	})
+	source := &serviceDirectMusic{pressings: []Pressing{{MBID: edition, Tracks: []Track{
+		{ID: track, RecordingID: recording, Name: "First track"},
+	}}}}
+	p := s.ArtistsWithTrackFallback(nil, source.Pressings)
+	ctx := MemberLookup(context.Background())
+	got, err := p.Pressings(ctx, serviceAlbumID)
+	if err != nil || len(got) != 1 || len(got[0].Tracks) != 1 || got[0].Tracks[0].Name != "First track" {
+		t.Fatalf("fallback pressings %+v %v", got, err)
+	}
+	if _, err := p.Pressings(TracklistOnly(ctx), serviceAlbumID); !errors.Is(err, ErrServiceIncomplete) {
+		t.Fatalf("empty warmup was kept as a success: %v", err)
+	}
+	if hits := source.pressHits.Load(); hits != 1 {
+		t.Fatalf("fallback got %d calls; warmup should skip it", hits)
+	}
+}

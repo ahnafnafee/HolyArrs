@@ -362,6 +362,10 @@ func Judge(rel ReleaseFacts, set SlotSet, rules PickRulesBody) Verdict {
 		v.add("parse", "resolution_guess", "warn", strings.Join(p.Notes, "; "), 0)
 	}
 
+	if p.Source.Conf == releasename.Likely && p.Source.Value == "web_rip" {
+		v.add("parse", "webrip_group", "warn", "WEBRip inferred from the "+p.Group.Value+" release group tag", 0)
+	}
+
 	// 1. Match.
 	switch {
 	case set.Match.Title == nil:

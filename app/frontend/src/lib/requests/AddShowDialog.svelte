@@ -28,7 +28,7 @@
 	} = $props();
 
 	let sheetOpen = $state(false);
-	let picked = $state<LookupShow | null>(null);
+	let picked = $state.raw<LookupShow | null>(null);
 	// Follow puts it on my calendar (ticked by default).
 	let follow = $state(true);
 	let folderId = $state(0);

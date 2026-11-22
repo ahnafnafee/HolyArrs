@@ -1,6 +1,8 @@
 package sources
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -18,6 +20,7 @@ type TitleSearchIn struct {
 	ItemID    *int64 `json:"item_id"`
 	Season    *int   `json:"season"`
 	VersionID *int64 `json:"version_id"`
+	Query     string `json:"query"`
 	AlbumID   *int64 `json:"album_id"` // artists: one album
 }
 
@@ -58,6 +61,16 @@ func (h *TitleSearchHandlers) searchTitle(w http.ResponseWriter, r *http.Request
 	if r.ContentLength != 0 && !webserver.Decode(w, r, &in, `body is {"choose": bool, "slot_id": int}, both optional; for a show also "item_id", "season" and "version_id"; for an artist "album_id", "item_id" and "version_id"`) {
 		return
 	}
+	in.Query = textQuery(Query{Title: in.Query})
+	if len(in.Query) > 800 {
+		webserver.Fail(w, http.StatusBadRequest, "release query is too long")
+		return
+	}
+	if in.Query != "" && (in.Choose == nil || *in.Choose ||
+		(t.Kind != "movie" && (t.Kind != "show" || in.SlotID == nil && in.ItemID == nil))) {
+		webserver.Fail(w, http.StatusBadRequest, "a release query lists results for one movie or episode")
+		return
+	}
 	if t.Kind == "show" {
 		h.Show(w, r, t, in)
 		return
@@ -94,6 +107,7 @@ func (h *TitleSearchHandlers) searchTitle(w http.ResponseWriter, r *http.Request
 		if params["choose"] == false {
 			key = "show_slot:" + strconv.FormatInt(s.ID, 10)
 		}
+		key = AddReleaseQuery(params, key, in.Query)
 		id, _, err := h.Queue.Enqueue(r.Context(), jobs.KindSearchSlot, &domain.Subject{Type: "slot", ID: s.ID}, params, key, actorOf(r))
 		if err != nil {
 			webserver.Internal(w, "sources", err)
@@ -106,4 +120,13 @@ func (h *TitleSearchHandlers) searchTitle(w http.ResponseWriter, r *http.Request
 		return
 	}
 	webserver.WriteJSON(w, http.StatusAccepted, map[string]any{"job_ids": ids})
+}
+
+// AddReleaseQuery distinguishes searches of the same Slot with different text.
+func AddReleaseQuery(params map[string]any, key, query string) string {
+	if query == "" {
+		return key
+	}
+	params["release_query"] = query
+	return fmt.Sprintf("%s:%x", key, sha256.Sum256([]byte(query)))
 }

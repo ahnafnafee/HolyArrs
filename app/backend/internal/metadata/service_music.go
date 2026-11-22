@@ -20,8 +20,9 @@ const (
 )
 
 type serviceMusic struct {
-	service *Service
-	direct  ArtistProvider
+	service       *Service
+	direct        ArtistProvider
+	trackFallback func(context.Context, string) ([]Pressing, error)
 
 	mu       sync.Mutex
 	inflight map[string]*artistFlight
@@ -73,7 +74,13 @@ func (m *serviceMusic) detachedArtist(ctx context.Context, mbid string) *artistF
 // Artists uses the optional standalone service while retaining the direct
 // provider for complete catalog reads and eligible fallbacks.
 func (s *Service) Artists(direct ArtistProvider) ArtistProvider {
-	return &serviceMusic{service: s, direct: direct}
+	return s.ArtistsWithTrackFallback(direct, nil)
+}
+
+// ArtistsWithTrackFallback also accepts an album-level source for foreground
+// track lists when the metadata server has no usable edition.
+func (s *Service) ArtistsWithTrackFallback(direct ArtistProvider, fallback func(context.Context, string) ([]Pressing, error)) ArtistProvider {
+	return &serviceMusic{service: s, direct: direct, trackFallback: fallback}
 }
 
 type serviceArtistData struct {
@@ -408,7 +415,8 @@ func (m *serviceMusic) Pressings(ctx context.Context, albumMBID string) ([]Press
 			return ps, err
 		}
 	}
-	ctx, cancel := serviceContext(ctx)
+	request := ctx
+	ctx, cancel := serviceContext(request)
 	defer cancel()
 	// A page view takes the chosen edition's tracks in one call; the Library
 	// (which keeps track ids) reads every edition below.
@@ -422,9 +430,24 @@ func (m *serviceMusic) Pressings(ctx context.Context, albumMBID string) ([]Press
 				return ps, ErrListCut
 			}
 		}
+		if m.trackFallback != nil && !IsTracklistOnly(ctx) && request.Err() == nil &&
+			(err == nil || errors.Is(err, ErrNotFound) || errors.Is(err, context.DeadlineExceeded) || serviceFallback(request, err)) {
+			ps, fallbackErr := m.trackFallback(request, albumMBID)
+			if (fallbackErr == nil || errors.Is(fallbackErr, ErrListCut)) && validDirectPressings(ps) {
+				for _, p := range ps {
+					if len(p.Tracks) > 0 {
+						return ps, fallbackErr
+					}
+				}
+			}
+		}
+		// A warm-up that found no tracks must not leave a successful empty
+		// flight for the foreground page to join.
+		if IsTracklistOnly(ctx) && err == nil {
+			return nil, ErrServiceIncomplete
+		}
 		// A refusing or unreachable server is asked again later, never
-		// through the per-edition fan-out (many requests into a refusal);
-		// a warm-up ask (TracklistOnly) stops here too.
+		// through the per-edition fan-out (many requests into a refusal).
 		if errors.Is(err, ErrServiceBusy) || errors.Is(err, ErrServiceUnavailable) || ctx.Err() != nil || IsTracklistOnly(ctx) {
 			return nil, err
 		}

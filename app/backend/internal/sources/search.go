@@ -255,6 +255,16 @@ func (s *Searcher) Handle(ctx context.Context, r *jobs.Run) error {
 	if v, ok := r.Job.Params["choose"].(bool); ok && !v {
 		show = true
 	}
+	if c.ti.Kind == "show" && c.ver.IsMain && c.sl.FileID == nil && !handSearch && !show {
+		covered, err := mediafiles.ShowEpisodeInOtherFolder(ctx, s.Store.Read(), slotID)
+		if err != nil {
+			return err
+		}
+		if covered {
+			r.SetResult(map[string]any{"skipped": "an existing copy is in another show folder"})
+			return nil
+		}
+	}
 	from := c.sl.State
 	switch {
 	case show:
@@ -312,7 +322,14 @@ func (s *Searcher) Handle(ctx context.Context, r *jobs.Run) error {
 		}
 		q = showQuery(ti, ep.ref.Season, ep)
 	}
-	q.other = s.nameAsk(ctx, ti, handSearch)
+	custom, _ := r.Job.Params["release_query"].(string)
+	if show && handSearch && custom != "" {
+		// Search the typed words without ID, year or alternate-name fallbacks.
+		q = Query{Title: custom, TV: isShow}
+	} else {
+		custom = ""
+		q.other = s.nameAsk(ctx, ti, handSearch)
+	}
 	all, failures, answered, skipped, note, err := s.askAll(ctx, r, q, handSearch, isShow, ti, c.ver.ID, c.pr.Body.Tags)
 	if err != nil {
 		return err
@@ -328,7 +345,7 @@ func (s *Searcher) Handle(ctx context.Context, r *jobs.Run) error {
 	}
 	// Absolute order also searches by title and running number; a Source
 	// that failed or was skipped is said once.
-	if aq, ok := absoluteQuery(ti, ep); isShow && ok {
+	if aq, ok := absoluteQuery(ti, ep); custom == "" && isShow && ok {
 		more, _, n, _, _, err := s.askAll(ctx, r, aq, handSearch, true, ti, c.ver.ID, c.pr.Body.Tags)
 		if err != nil {
 			return err
@@ -347,6 +364,12 @@ func (s *Searcher) Handle(ctx context.Context, r *jobs.Run) error {
 			return nil
 		}
 		return errors.New(reason)
+	}
+	if custom != "" {
+		words := nameWords(custom)
+		all = slices.DeleteFunc(all, func(f found) bool {
+			return !namesAll(f.item.Title, words)
+		})
 	}
 	all = dedupe(all)
 	out := from != mediafiles.SlotNotOutYet

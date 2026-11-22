@@ -284,3 +284,32 @@ func TestHDRWordsHolyArrsWrites(t *testing.T) {
 		}
 	}
 }
+
+func TestInferWebRipFromTrustedHDHEVCGroup(t *testing.T) {
+	t.Setenv("HOLYARRS_WEBRIP_GROUPS", " Example, MeGusta ")
+	tests := []struct {
+		name   string
+		source string
+		conf   Conf
+	}{
+		{"Abbott Elementary S02E10 720p HEVC x265-MeGusta", "web_rip", Likely},
+		{"Example.Movie.2025.1080p.H265-megusta", "web_rip", Likely},
+		{"Example.Movie.2025.1080p.H265-MeGustaExtra", "", Unknown},
+		{"Example.Movie.2025.1080p.H265", "", Unknown},
+		{"Example.Movie.2025.1080p.H264-MeGusta", "", Unknown},
+		{"Example.Movie.2025.2160p.HEVC-MeGusta", "", Unknown},
+		{"Example.Movie.2025.720p.1080p.HEVC-MeGusta", "", Unknown},
+		{"Example.Movie.2025.1080p.BluRay.HEVC-MeGusta", "bluray", Sure},
+		{"Example.Movie.2025.1080p.CAM.HEVC-MeGusta", "cam", Sure},
+	}
+	for _, tc := range tests {
+		if p := Parse(tc.name, Hints{}); p.Source.Value != tc.source || p.Source.Conf != tc.conf {
+			t.Errorf("%s source = %+v, want %q (%s)", tc.name, p.Source, tc.source, tc.conf)
+		}
+	}
+
+	t.Setenv("HOLYARRS_WEBRIP_GROUPS", "")
+	if p := Parse(tests[0].name, Hints{}); p.Source.Conf != Unknown {
+		t.Fatalf("empty allowlist inferred a source: %+v", p.Source)
+	}
+}

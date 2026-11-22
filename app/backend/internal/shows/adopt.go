@@ -298,11 +298,46 @@ type ShowAdoption struct {
 	Unknown  []string
 }
 
+type preparedEpisodeFile struct {
+	library.AdoptEpisodeFile
+	media mediafiles.File
+}
+
+func prepareEpisodeFile(libraryPath string, af library.AdoptEpisodeFile) preparedEpisodeFile {
+	out := preparedEpisodeFile{AdoptEpisodeFile: af}
+	if len(af.Keys) == 0 {
+		return out
+	}
+	release := strings.TrimSuffix(path.Base(af.Path), path.Ext(af.Path))
+	p := releasename.Parse(release, releasename.Hints{Size: af.Size, Show: true})
+	info := map[string]any{"step": mediafiles.StepFor(p)}
+	if inspected, ok := library.InspectLibraryVideo(libraryPath, af.Path, info, false); ok {
+		info = inspected
+	}
+	if judge := mediafiles.JudgeName(release, info); judge != release {
+		p = releasename.Parse(judge, releasename.Hints{Size: af.Size, Show: true})
+		info["step"] = mediafiles.StepFor(p)
+	}
+	out.media = mediafiles.File{
+		RelativePath: af.Path, Size: af.Size, ReleaseName: &release,
+		Quality:   mediafiles.Quality{Resolution: p.Resolution.Value, Source: p.Source.Value, Codec: p.Codec.Value, HDR: p.HDR.Value},
+		Languages: library.InspectedLanguages(info), MediaInfo: info, Origin: "adopted",
+		PlacedBy: "none", Role: "main", State: "present",
+	}
+	if out.media.Languages == nil {
+		out.media.Languages = []string{}
+	}
+	if g := p.Group.Value; g != "" {
+		out.media.Group = &g
+	}
+	return out
+}
+
 // adoptEpisodesTx records the mapped files of a show folder as adopted
 // Files of the new show's main Version: each file fills the Slots of the
 // episodes it holds (in the Library, or looking for a better copy when it
 // is below good enough and kept up to date).
-func adoptEpisodesTx(ctx context.Context, tx *sql.Tx, titleID, versionID, pickRulesID int64, keep bool, files []library.AdoptEpisodeFile, a *ShowAdoption, now time.Time, by domain.Actor) error {
+func adoptEpisodesTx(ctx context.Context, tx *sql.Tx, titleID, versionID, pickRulesID int64, keep bool, files []preparedEpisodeFile, a *ShowAdoption, now time.Time, by domain.Actor) error {
 	var pr mediafiles.PickRules
 	if err := database.Get(ctx, tx, "pick_rules", pickRulesID, &pr); err != nil {
 		return err
@@ -339,33 +374,13 @@ func adoptEpisodesTx(ctx context.Context, tx *sql.Tx, titleID, versionID, pickRu
 			a.Unknown = append(a.Unknown, af.Path+": its episodes are not in the show's episode list")
 			continue
 		}
-		ext := path.Ext(af.Path)
-		release := strings.TrimSuffix(path.Base(af.Path), ext)
-		p := releasename.Parse(release, releasename.Hints{Size: af.Size, Show: true})
-		info := map[string]any{"step": mediafiles.StepFor(p)}
-		if inspected, ok := library.InspectLibraryVideo(a.LibraryPath, af.Path, info, false); ok {
-			info = inspected
-		}
-		judge := mediafiles.JudgeName(release, info)
-		if judge != release {
-			p = releasename.Parse(judge, releasename.Hints{Size: af.Size, Show: true})
-			info["step"] = mediafiles.StepFor(p)
-		}
-		f := &mediafiles.File{SlotIDs: slotIDs, VersionID: versionID, RelativePath: af.Path, Size: af.Size, AddedAt: now,
-			Quality:   mediafiles.Quality{Resolution: p.Resolution.Value, Source: p.Source.Value, Codec: p.Codec.Value, HDR: p.HDR.Value},
-			Languages: library.InspectedLanguages(info), MediaInfo: info, ReleaseName: &release, Origin: "adopted",
-			PlacedBy: "none", Role: "main", State: "present"}
-		if f.Languages == nil {
-			f.Languages = []string{}
-		}
-		if g := p.Group.Value; g != "" {
-			f.Group = &g
-		}
-		fileID, err := database.Insert(tx, "files", f, by)
+		f := af.media
+		f.SlotIDs, f.VersionID, f.AddedAt = slotIDs, versionID, now
+		fileID, err := database.Insert(tx, "files", &f, by)
 		if err != nil {
 			return err
 		}
-		ge := mediafiles.OwnedReachesGoodEnough(release, info, pr.Body)
+		ge := mediafiles.OwnedReachesGoodEnough(*f.ReleaseName, f.MediaInfo, pr.Body)
 		state, why := mediafiles.SlotInLibrary, "adopted from "+a.FolderName
 		if !ge && keep {
 			state, why = mediafiles.SlotBetterWanted, "adopted below good enough, so a better copy is sought"
@@ -532,6 +547,7 @@ func (s *Service) recordFoundEpisodes(ctx context.Context, lf mediafiles.Library
 			slotIDs = []int64{}
 		}
 		if len(slotIDs) > 0 && len(slotIDs) == len(af.Keys) {
+			prepared := prepareEpisodeFile(lf.Path, af)
 			linked := false
 			err := s.Store.Write(ctx, func(tx *sql.Tx) error {
 				var stale []int64
@@ -573,7 +589,7 @@ func (s *Service) recordFoundEpisodes(ctx context.Context, lf mediafiles.Library
 					}
 				}
 				a := &ShowAdoption{FolderName: v.FolderName, LibraryPath: lf.Path}
-				if err := adoptEpisodesTx(ctx, tx, t.ID, v.ID, v.PickRulesID, v.KeepUpToDate, []library.AdoptEpisodeFile{af}, a, s.Clock(), by); err != nil {
+				if err := adoptEpisodesTx(ctx, tx, t.ID, v.ID, v.PickRulesID, v.KeepUpToDate, []preparedEpisodeFile{prepared}, a, s.Clock(), by); err != nil {
 					return err
 				}
 				if a.Adopted == 0 {

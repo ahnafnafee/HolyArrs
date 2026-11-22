@@ -1,5 +1,7 @@
 <script lang="ts">
 	// Sheet that lists the releases found for a title and lets the user pick or reject one.
+	import { untrack } from 'svelte';
+	import ReleaseSearchForm from './ReleaseSearchForm.svelte';
 	import Sheet from '#lib/ui/Sheet.svelte';
 	import Icon from '#lib/ui/Icon.svelte';
 	import { keyReasons, verdict, verdictTone } from './releases.ts';
@@ -21,9 +23,12 @@
 	let loading = $state(false);
 	let busyId = $state(0);
 	let confirmId = $state(0);
-	let filter = $state<'good' | 'all'>('good');
-	// Time of the last search start, so an empty list is not read as done too early.
-	let startedAt = 0;
+	let filter = $state<'good' | 'all'>('all');
+	let jobs = $state<number[]>([]);
+	let starting = $state(false);
+	let request = 0;
+	const episode = $derived(typeof scope?.body.slot_id === 'number' && show);
+	const searchHint = $derived(episode ? name + ' ' + scope?.label : name);
 
 	// Chosen first, then passed, then best rank. Good view hides failed and turned down ones.
 	const sorted = $derived(
@@ -34,7 +39,22 @@
 	const hidden = $derived(releases.length - releases.filter((r) => r.passed && r.state !== 'turned_down').length);
 
 	$effect(() => {
-		if (open) void load();
+		void titleId;
+		void scope;
+		if (!open) {
+			request++;
+			return;
+		}
+		untrack(() => {
+			jobs = [];
+			running = [];
+			releases = [];
+			total = 0;
+			filter = 'all';
+			confirmId = 0;
+			starting = false;
+			void load();
+		});
 	});
 	// Poll while a search runs so results show as they arrive.
 	$effect(() => {
@@ -44,28 +64,42 @@
 	});
 
 	async function load() {
+		const id = ++request;
 		loading = true;
 		try {
 			// Demo data only shows in dev builds.
-			const p = import.meta.env.DEV && new URLSearchParams(location.search).get('releases') === 'demo' ? demoPage(name) : await api.get<ReleasePage>(`/titles/${titleId}/releases?${scope ? scope.query + '&' : ''}limit=60&offset=0`);
+			const params = new URLSearchParams(scope?.query);
+			params.set('limit', '60');
+			if (jobs.length) params.set('jobs', jobs.join(','));
+			const p = import.meta.env.DEV && new URLSearchParams(location.search).get('releases') === 'demo' ? demoPage(name) : await api.get<ReleasePage>(`/titles/${titleId}/releases?${params}`);
+			if (request !== id) return;
 			releases = p.releases;
 			total = p.total;
-			// Keep our own job ids for a minute: the server may not list them yet.
-			const mine = Date.now() - startedAt < 60_000 && !p.releases.length ? running : [];
-			running = [...new Set([...(p.running_job_ids ?? []), ...mine])];
+			running = jobs.length ? p.running_job_ids ?? [] : [];
 		} catch (e) {
 			toasts.push(t('mediafiles.releaseSheet.loadFailed'), 'fail', { body: message(e) });
 		} finally {
-			loading = false;
+			if (request === id) loading = false;
 		}
 	}
-	async function search() {
+	async function search(query = '') {
+		const searchTitle = titleId;
+		const searchScope = scope;
+		starting = true;
 		try {
-			startedAt = Date.now();
-			const r = await api.post<{ job_ids: number[] }>(`/titles/${titleId}/search`, { ...(scope?.body ?? {}), choose: false });
-			running = [...new Set([...running, ...r.job_ids])];
+			const r = await api.post<{ job_ids: number[] }>(`/titles/${titleId}/search`, { ...(scope?.body ?? {}), choose: false, query });
+			if (!open || searchTitle !== titleId || searchScope !== scope) return;
+			jobs = r.job_ids;
+			running = r.job_ids;
+			releases = [];
+			total = 0;
+			filter = 'all';
+			confirmId = 0;
+			await load();
 		} catch (e) {
 			toasts.push(t('mediafiles.title.startFailed'), 'fail', { body: message(e) });
+		} finally {
+			starting = false;
 		}
 	}
 	async function choose(r: ReleaseView) {
@@ -151,12 +185,15 @@
 
 <Sheet bind:open title={t('mediafiles.releaseSheet.choose')} description={scope ? `${name} · ${scope.label}` : name} size="lg">
 	<div class="rs" data-testid="release-sheet">
+		{#if !show || episode}
+			{#key searchHint}<ReleaseSearchForm hint={searchHint} busy={starting || running.length > 0} onsearch={search} />{/key}
+		{/if}
 		<div class="rs-bar">
 			<div class="rs-seg" role="tablist">
 				<button type="button" role="tab" class:on={filter === 'good'} aria-selected={filter === 'good'} onclick={() => (filter = 'good')}>{t('mediafiles.releaseSheet.good')}</button>
 				<button type="button" role="tab" class:on={filter === 'all'} aria-selected={filter === 'all'} onclick={() => (filter = 'all')}>{t('mediafiles.releaseSheet.all')} {total || ''}</button>
 			</div>
-			{#if !partOnly}<button type="button" class="rs-search" disabled={running.length > 0} onclick={search}><Icon name="search" size={15} />{running.length ? t('mediafiles.releaseSheet.searchingDots') : t('mediafiles.releaseSheet.searchAgain')}</button>{/if}
+			{#if show && !partOnly && !episode}<button type="button" class="rs-search" disabled={starting || running.length > 0} onclick={() => search()}><Icon name="search" size={15} />{running.length ? t('mediafiles.releaseSheet.searchingDots') : t('mediafiles.releaseSheet.searchAgain')}</button>{/if}
 		</div>
 		{#if running.length}<div class="rs-run" aria-live="polite"><span class="rs-spin" aria-hidden="true"></span>{t('mediafiles.releaseSheet.asking')}</div>{/if}
 
@@ -165,12 +202,11 @@
 		{:else if !releases.length && !running.length}
 			<div class="rs-empty">
 				<Icon name="grid" size={28} />
-				<p><b>{t('mediafiles.releaseSheet.noSearch')}</b></p>
+				<p><b>{t(jobs.length ? 'mediafiles.releaseSheet.noResults' : 'mediafiles.releaseSheet.noSearch')}</b></p>
 				{#if partOnly}
 					<p class="muted" data-testid="release-sheet-part">{t('mediafiles.releaseSheet.showPickPart', { choose: t('discover.titleOwned.chooseRelease') })}</p>
-				{:else}
+				{:else if !jobs.length}
 					<p class="muted">{t('mediafiles.releaseSheet.noSearchHint')}</p>
-					<button type="button" class="rs-primary" onclick={search}><Icon name="search" size={16} />{t('mediafiles.select.searchNow')}</button>
 				{/if}
 			</div>
 		{:else}
@@ -219,8 +255,7 @@
 	.rs-seg button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 	@media (pointer: coarse) { .rs-seg button { height: 40px; } }
 	.rs-seg button.on { background: var(--surface-1, var(--bg)); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 18%); }
-	.rs-search, .rs-primary { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font: 600 13px/1 var(--font-ui); cursor: pointer; white-space: nowrap; }
-	.rs-primary { height: 40px; padding: 0 18px; background: var(--text); color: var(--bg); font-size: 14px; }
+	.rs-search { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); font: 600 13px/1 var(--font-ui); cursor: pointer; white-space: nowrap; }
 	.rs-run { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--info) 12%, transparent); font: 500 13px/1.3 var(--font-ui); }
 	.rs-spin { width: 14px; height: 14px; border-radius: 99px; border: 2px solid color-mix(in srgb, var(--info) 30%, transparent); border-top-color: var(--info); animation: spin .8s linear infinite; }
 	@keyframes spin { to { transform: rotate(360deg); } }
@@ -255,7 +290,6 @@
 	.rs-sent { display: inline-flex; align-items: center; gap: 5px; color: var(--ok-text); font: 600 13px/1 var(--font-ui); }
 	.rs-empty { display: grid; justify-items: center; gap: 6px; padding: 48px 16px; text-align: center; color: var(--text); }
 	.rs-empty p { margin: 0; max-width: 34ch; }
-	.rs-empty .rs-primary { margin-top: 12px; }
 	.rs-none { padding: 24px 4px; font: 500 14px/1.4 var(--font-ui); }
 	.rs-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
 	@media (max-width: 600px) { .rs-row { padding: 12px 12px 12px 14px; gap: 10px; } .rs-choose { padding: 0 14px; } }

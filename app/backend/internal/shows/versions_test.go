@@ -205,3 +205,62 @@ func TestShowVersionsRename(t *testing.T) {
 		}
 	}
 }
+
+func TestShowEpisodesInSecondaryFolderCountAsOwned(t *testing.T) {
+	svc, s, _, _ := addShowService(t)
+	ctx := context.Background()
+	mainFolder, otherFolder := addShowFolder(t, s), addShowFolder(t, s)
+	unmonitored := false
+	id, _, err := svc.AddShow(ctx, "tmdb:100", ShowAddOptions{
+		LibraryFolderID: mainFolder.ID,
+		Seasons:         library.SeasonsAll,
+		MoreVersions:    []library.VersionInput{{Label: "Other folder", LibraryFolderID: otherFolder.ID, KeepUpToDate: &unmonitored}},
+	}, domain.System)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := Seasons(ctx, s.Read(), id, now)
+	if err != nil || len(before) < 2 || before[1].Missing == 0 {
+		t.Fatalf("before: %v %v", before, err)
+	}
+	vs, err := mediafiles.VersionsOfTitle(ctx, s.Read(), id)
+	if err != nil || len(vs) != 2 || !vs[0].IsMain {
+		t.Fatalf("versions: %v %v", vs, err)
+	}
+	var mainSlot, otherSlot int64
+	err = s.Read().QueryRow(`SELECT a.id, b.id FROM slots a JOIN slots b ON a.item_id = b.item_id JOIN items i ON a.item_id = i.id
+		WHERE a.version_id = ? AND b.version_id = ? AND json_extract(i.numbers, '$.season') = 1 AND json_extract(i.numbers, '$.episode') = 1`,
+		vs[0].ID, vs[1].ID).Scan(&mainSlot, &otherSlot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := mediafiles.File{SlotIDs: []int64{otherSlot}, VersionID: vs[1].ID, RelativePath: vs[1].FolderName + "/test.mkv",
+		Size: 10, AddedAt: now, Languages: []string{}, MediaInfo: map[string]any{}, Origin: "adopted", PlacedBy: "none", Role: "main", State: "present"}
+	if err = s.Write(ctx, func(tx *sql.Tx) error {
+		if _, err := database.Insert(tx, "files", &f, domain.System); err != nil {
+			return err
+		}
+		_, err := tx.Exec("UPDATE slots SET file_id = ?, state = 'in_library' WHERE id = ?", f.ID, otherSlot)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := Seasons(ctx, s.Read(), id, now)
+	if err != nil || after[1].InLibrary != before[1].InLibrary+1 || after[1].Missing != before[1].Missing-1 {
+		t.Fatalf("after: %v %v", after, err)
+	}
+	covered, err := mediafiles.ShowEpisodeInOtherFolder(ctx, s.Read(), mainSlot)
+	if err != nil || !covered {
+		t.Fatalf("covered: %v %v", covered, err)
+	}
+	if err = s.Write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.Exec("UPDATE versions SET keep_up_to_date = 1 WHERE id = ?", vs[1].ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	covered, err = mediafiles.ShowEpisodeInOtherFolder(ctx, s.Read(), mainSlot)
+	if err != nil || covered {
+		t.Fatalf("independently monitored version covered the primary: %v %v", covered, err)
+	}
+}

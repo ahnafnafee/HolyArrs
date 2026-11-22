@@ -221,13 +221,18 @@ func (s *Service) AddShow(ctx context.Context, id string, opt ShowAddOptions, by
 	if err != nil {
 		return 0, 0, err
 	}
-	var adoptFiles []library.AdoptEpisodeFile
+	var adoptFiles []preparedEpisodeFile
 	if opt.Adopt != nil {
-		adoptFiles = mapEpisodeFiles(library.ListVideosN(lf.Path, opt.Adopt.FolderName, maxShowVideos), sh, opt.EpisodeOrder)
-		for i := range adoptFiles {
-			if opt.SeasonsDiffer {
-				adoptFiles[i].Keys, adoptFiles[i].Episodes, adoptFiles[i].Why = nil, []string{}, "the old app numbers this show's seasons differently"
+		mapped := mapEpisodeFiles(library.ListVideosN(lf.Path, opt.Adopt.FolderName, maxShowVideos), sh, opt.EpisodeOrder)
+		adoptFiles = make([]preparedEpisodeFile, 0, len(mapped))
+		for _, af := range mapped {
+			if err := ctx.Err(); err != nil {
+				return 0, 0, err
 			}
+			if opt.SeasonsDiffer {
+				af.Keys, af.Episodes, af.Why = nil, []string{}, "the old app numbers this show's seasons differently"
+			}
+			adoptFiles = append(adoptFiles, prepareEpisodeFile(lf.Path, af))
 		}
 		opt.Adopt.SeasonsDiffer = opt.SeasonsDiffer
 	}
@@ -374,7 +379,8 @@ func ShowSeasonsToSearch(ctx context.Context, db database.Lister, titleID int64)
 	rows, err := db.QueryContext(ctx, `SELECT DISTINCT p.id, s.version_id FROM parts p JOIN items i ON i.part_id = p.id JOIN slots s ON s.item_id = i.id
 		JOIN titles t ON t.id = p.title_id JOIN versions v ON v.id = s.version_id
 		WHERE p.title_id = ? AND t.keep_up_to_date = 1 AND v.keep_up_to_date = 1 AND p.keep_up_to_date = 1 AND i.keep_up_to_date = 1 AND i.dropped_at IS NULL
-		AND s.state IN ('wanted', 'better_wanted', 'failed', 'rejected', 'stalled') ORDER BY p.number, s.version_id`, titleID)
+		AND s.state IN ('wanted', 'better_wanted', 'failed', 'rejected', 'stalled')
+		AND (s.file_id IS NOT NULL OR `+mediafiles.ShowOtherFolderFileSQL+` IS NULL) ORDER BY p.number, s.version_id`, titleID)
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +569,7 @@ type SeasonSummary struct {
 	KeepUpToDate bool       `json:"keep_up_to_date"`
 	Episodes     int        `json:"episodes"`
 	Aired        int        `json:"aired"`
-	InLibrary    int        `json:"in_library"`    // episodes with a file in the main Version
+	InLibrary    int        `json:"in_library"`    // episodes with a file in either library folder
 	Missing      int        `json:"missing"`       // aired, kept up to date, no file yet
 	BetterWanted int        `json:"better_wanted"` // in the Library, a better copy is sought
 	NotOutYet    int        `json:"not_out_yet"`
@@ -574,8 +580,8 @@ type SeasonSummary struct {
 	Dropped      bool       `json:"dropped,omitempty"`
 }
 
-// Seasons summarises a show's seasons from its episodes and the main
-// Version's Slots.
+// Seasons summarises a show's episodes and counts copies in a second library
+// folder when there is no primary copy.
 func Seasons(ctx context.Context, db database.Lister, titleID int64, now time.Time) ([]SeasonSummary, error) {
 	parts, err := database.Select[mediafiles.Part](ctx, db, "parts", "title_id = ? AND kind = 'season' ORDER BY number", titleID)
 	if err != nil {
@@ -598,7 +604,8 @@ func Seasons(ctx context.Context, db database.Lister, titleID int64, now time.Ti
 	}
 	// One query for every season of the show instead of one per season. The
 	// main Version is looked up once (by the show's id), not once per episode.
-	rows, err := db.QueryContext(ctx, `SELECT i.part_id, i.air_date, COALESCE(i.air_day, ''), i.keep_up_to_date, COALESCE(s.state, ''), s.file_id IS NOT NULL FROM items i
+	rows, err := db.QueryContext(ctx, `SELECT i.part_id, i.air_date, COALESCE(i.air_day, ''), i.keep_up_to_date, CASE WHEN s.file_id IS NULL AND `+mediafiles.ShowOtherFolderFileSQL+` IS NOT NULL THEN 'in_library' ELSE COALESCE(s.state, '') END,
+		`+mediafiles.ShowEpisodeHasFileSQL+` FROM items i
 		LEFT JOIN slots s ON s.item_id = i.id AND s.version_id = (SELECT id FROM versions WHERE title_id = ? ORDER BY is_main DESC, id LIMIT 1)
 		WHERE i.part_id IN (SELECT id FROM parts WHERE title_id = ? AND kind = 'season')`, titleID, titleID)
 	if err != nil {

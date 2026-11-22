@@ -2,6 +2,7 @@ package releasename
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -691,6 +692,19 @@ func readTags(r *Result, tags []string, flags map[string]bool, h Hints) {
 		r.Codec = sure("mpeg2")
 	default:
 		r.Codec.Conf = Unknown
+	}
+
+	// Some trusted groups omit the source tag on their HD HEVC encodes.
+	if r.Source.Conf == Unknown && r.Group.Conf == Sure &&
+		r.Resolution.Conf == Sure && (r.Resolution.Value == 720 || r.Resolution.Value == 1080) &&
+		r.Codec.Conf == Sure && r.Codec.Value == "h265" {
+		groups := strings.SplitSeq(os.Getenv("HOLYARRS_WEBRIP_GROUPS"), ",")
+		for group := range groups {
+			if strings.EqualFold(strings.TrimSpace(group), r.Group.Value) {
+				r.Source = likely("web_rip")
+				break
+			}
+		}
 	}
 
 	// HDR. The words HolyArrs writes in a file name read back too, so a

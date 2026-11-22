@@ -165,6 +165,9 @@ func (s *Searcher) HandleSeason(ctx context.Context, r *jobs.Run) error {
 		if e.ref.Season != season || e.it.PartID != nil && *e.it.PartID != part.ID {
 			continue
 		}
+		if e.otherFolderCopy && !show {
+			continue
+		}
 		if e.kept || anyEp {
 			kept = append(kept, e)
 		}

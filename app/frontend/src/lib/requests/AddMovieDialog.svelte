@@ -25,7 +25,7 @@
 	} = $props();
 
 	let addOpen = $state(false);
-	let picked = $state<LookupMovie | null>(null);
+	let picked = $state.raw<LookupMovie | null>(null);
 	// Follow puts it on my calendar (ticked by default).
 	let follow = $state(true);
 	let folderId = $state(0);

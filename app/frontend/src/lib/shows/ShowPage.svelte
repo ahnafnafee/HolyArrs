@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { availableEpisodeSlot } from '#lib/core/episodes.ts';
 	import PersonText from '#lib/ui/PersonText.svelte';
 	import { serverWords } from '#lib/core/i18n/server-words.ts';
 	// Show detail page: episodes by season, staff tools, requests and history.
@@ -320,7 +321,8 @@
 
 	function episodeItems(ep: EpisodeView): MenuItem[] {
 		const code = episodeLabel(ep, order);
-		const word = searchWord(mainSlot(ep)?.state);
+		const owned = availableEpisodeSlot(ep.slots);
+		const word = owned?.other_folder ? '' : searchWord(mainSlot(ep)?.state);
 		const items: MenuItem[] = [];
 		if (word) items.push({ label: word, icon: 'search', onselect: () => searchEpisode(ep), disabled: searching === `e${ep.id}` });
 		if (mainSlot(ep)) items.push({ label: t('shows.page.chooseRelease'), icon: 'grid', onselect: () => searchEpisode(ep, true), disabled: searching === `e${ep.id}l` });
@@ -509,8 +511,8 @@
 				{@const eps = episodes[s.number]}
 				<EpisodeList rows={rowsOf(s.number)} fallback={title.backdrop ?? rich?.backdrop}>
 					{#snippet status(i: number)}
-						{@const main = mainSlot(eps[i])}
-						{#if staff && main}<StatusPill kind={slotKind(main.state)} label={eps[i].slots.length > 1 ? eps[i].slots.map((x) => `${x.version}: ${serverWords(x.state_label)}`).join(' · ') : serverWords(main.state_label)} testid="episode-state" />{/if}
+						{@const available = availableEpisodeSlot(eps[i].slots)}
+						{#if staff && available}<StatusPill kind={slotKind(available.state)} label={available.other_folder ? `${available.version} · ${serverWords(available.state_label)}` : eps[i].slots.length > 1 ? eps[i].slots.map((x) => `${x.version}: ${serverWords(x.state_label)}`).join(' · ') : serverWords(available.state_label)} testid="episode-state" />{/if}
 					{/snippet}
 					{#snippet action(i: number)}
 						{#if staff}<Menu label={t('shows.page.episodeActions', { name: episodeLabel(eps[i], order) })} items={episodeItems(eps[i])} width={250} />{/if}
@@ -573,7 +575,7 @@
 {#if staff}
 	<LibrarySection note={t('shows.page.librarySectionNote')}>
 		{#if scope}
-			<ShowReleases titleId={title.id} {scope} jobs={scopeJobs} onclose={() => (scope = null)} onchange={() => void reload()} />
+			<ShowReleases titleId={title.id} searchHint={title.name + " " + scope.label} {scope} jobs={scopeJobs} onclose={() => (scope = null)} onchange={() => void reload()} />
 		{/if}
 		<ShowVersions {title} {staff} onchange={reload} />
 		<CopyControls {title} onchange={reload} />

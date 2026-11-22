@@ -29,6 +29,7 @@ export { genreHref } from './music-trending.ts';
 export { installArtistVideoPrefetch } from './artist-video-prefetch.ts';
 export { installMusicPrefetch } from './music-prefetch.ts';
 export { keepShown } from './reask.ts';
+export { lookupArtist, variousArtistsMbid } from './artist-lookup.ts';
 export { kindWord } from './music-pages.ts';
 export { length } from './music-pages.ts';
 export { mainKinds } from './labels.ts';

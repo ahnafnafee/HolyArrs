@@ -2,7 +2,7 @@
 import type { EpisodeView, SeasonSummary, ShowInfo } from '../core/types.ts';
 import { date } from '../core/format.ts';
 import { t } from '../core/i18n/i18n.svelte.ts';
-import { episodeCode } from '../core/episodes.ts';
+import { availableEpisodeSlot, episodeCode } from '../core/episodes.ts';
 import { airedEpisodes, staleWhileImporting } from '#lib/mediafiles/index.ts';
 
 export { episodeCode };
@@ -80,7 +80,7 @@ export function mainSlot(e: EpisodeView) {
 
 // Explains why an episode is or is not kept, from the broadest switch to the narrowest.
 export function episodeWhy(e: EpisodeView, seasonKept: boolean, showKept: boolean): string {
-	const s = mainSlot(e);
+	const s = availableEpisodeSlot(e.slots);
 	if (s && (s.state === 'in_library' || s.state === 'better_wanted')) return s.reason ?? '';
 	if (!showKept) return t('shows.keepOff.show');
 	if (!seasonKept) return t('shows.keepOff.season');
@@ -97,7 +97,7 @@ export function searchWord(state: string | undefined): string {
 }
 
 export function seasonLooking(eps: EpisodeView[]): number {
-	return eps.filter((e) => ['wanted', 'better_wanted', 'failed', 'rejected', 'stalled'].includes(mainSlot(e)?.state ?? '')).length;
+	return eps.filter((e) => ['wanted', 'better_wanted', 'failed', 'rejected', 'stalled'].includes(availableEpisodeSlot(e.slots)?.state ?? '')).length;
 }
 
 // Skips specials and seasons with nothing aired or coming.

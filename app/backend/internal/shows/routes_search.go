@@ -49,6 +49,16 @@ func (h *SearchHandlers) Search(w http.ResponseWriter, r *http.Request, t mediaf
 			return
 		}
 	}
+	if in.VersionID == nil && in.SlotID == nil {
+		var main mediafiles.Version
+		for _, v := range vs {
+			if v.IsMain {
+				main = v
+				break
+			}
+		}
+		vs = slices.DeleteFunc(vs, func(v mediafiles.Version) bool { return mediafiles.OtherShowFolder(main, v) })
+	}
 	by := actor(r)
 	ids := []int64{}
 	episode := func(slotID int64) error {
@@ -58,6 +68,7 @@ func (h *SearchHandlers) Search(w http.ResponseWriter, r *http.Request, t mediaf
 			params["choose"] = false
 			key = "show_slot:" + strconv.FormatInt(slotID, 10)
 		}
+		key = sources.AddReleaseQuery(params, key, in.Query)
 		id, _, err := h.Queue.Enqueue(ctx, jobs.KindSearchSlot, &domain.Subject{Type: "slot", ID: slotID}, params, key, by)
 		if err == nil {
 			ids = append(ids, id)

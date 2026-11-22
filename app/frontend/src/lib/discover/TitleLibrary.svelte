@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { availableEpisodeSlot } from '#lib/core/episodes.ts';
 	import { ask } from '#lib/ui/ask.svelte.ts';
 	import { serverWords } from '#lib/core/i18n/server-words.ts';
 	import { t, appLocale } from '#lib/core/i18n/i18n.svelte.ts';
@@ -450,8 +451,9 @@
 									{#if seasonFailed.has(se.number) && !seasonEps[se.number]}<p class="form-error" role="alert">{t('discover.titleLibrary.couldnTLoadThis')} <button type="button" class="lib-link" onclick={() => loadSeason(o.id, se.number)}>{t('discover.titleLibrary.retry')}</button></p>{/if}
 									{#each splitOutside(seasonEps[se.number] ?? []).inside as e (e.id)}
 										{@const st = e.slots[0]}
-										{@const tone = epTone(st?.state ?? '', !!st?.file)}
-										{@const aired = !e.air_date || Date.parse(e.air_date) <= Date.now() || !!st?.file}
+										{@const available = availableEpisodeSlot(e.slots)}
+										{@const tone = epTone(available?.state ?? '', !!available?.file)}
+										{@const aired = !e.air_date || Date.parse(e.air_date) <= Date.now() || !!available?.file}
 										<!-- The row is not a button itself, since it holds buttons: the title button opens the episode and stretches over the row. -->
 										<div class="lib-ep {tone}" class:future={!aired}>
 											{#if manage}<button type="button" class="lib-keep sm" class:on={e.keep_up_to_date !== false} aria-pressed={e.keep_up_to_date !== false} title={e.keep_up_to_date !== false ? t('discover.titleLibrary.keptUpToDate') : t('discover.titleLibrary.notKeptUpToDate')} aria-label={t('discover.titleLibrary.keepEpisodeUpTo', { episode: e.episode })} onclick={(ev) => { ev.stopPropagation(); void keepEpisode(e, se.number); }}><Icon name="check" size={11} /></button>{/if}
@@ -461,11 +463,11 @@
 												<small>{[airWords(e.air_day, e.air_date), e.runtime_minutes ? t('discover.titleLibrary.runtimeMin', { n: e.runtime_minutes }) : '', epFile(e)].filter(Boolean).join(' · ')}</small>
 												{#if manage && chosenWhy(st)}<small class="lib-ep-why" data-testid="episode-chosen-why">{serverWords(chosenWhy(st))}</small>{/if}
 											</button>
-											<span class="lib-ep-st {aired ? tone : 'future'}"><span class="own-dot {tone}" aria-hidden="true"></span>{aired ? epQuality(e) || (st?.state === 'not_out_yet' ? t('discover.titleLibrary.waitingAfterAir') : '') || serverWords(st?.state_label) || t('discover.titleLibrary.missing') : t('discover.titleLibrary.notOutYet')}</span>
+											<span class="lib-ep-st {aired ? tone : 'future'}"><span class="own-dot {tone}" aria-hidden="true"></span>{aired ? epQuality(e) || (available?.state === 'not_out_yet' ? t('discover.titleLibrary.waitingAfterAir') : '') || serverWords(available?.state_label) || t('discover.titleLibrary.missing') : t('discover.titleLibrary.notOutYet')}</span>
 											{#if manage && st}
 												<span class="lib-ep-acts">
-													<button type="button" class="lib-ico" title={t('discover.titleLibrary.lookForItNow')} aria-label={t('discover.titleLibrary.lookForEpisode', { episode: e.episode })} disabled={!aired || tone === 'downloading' || busyAction === `e${e.id}`} onclick={(ev) => { ev.stopPropagation(); void epSearch({ slot_id: st.id }, `e${e.id}`, t('discover.titleLibrary.searchingEpisode', { episode: e.episode })); }}><Icon name="search" size={14} /></button>
-													<button type="button" class="lib-ico" title={t('discover.titleLibrary.chooseAReleaseFor3')} aria-label={t('discover.titleLibrary.chooseAReleaseFor4', { episode: e.episode })} disabled={!aired} onclick={(ev) => { ev.stopPropagation(); own.openPick({ label: `S${se.number} E${e.episode}`, query: `item_id=${e.id}`, body: { slot_id: st.id } }); }}><Icon name="grid" size={14} /></button>
+													<button type="button" class="lib-ico" title={t('discover.titleLibrary.lookForItNow')} aria-label={t('discover.titleLibrary.lookForEpisode', { episode: e.episode })} disabled={!aired || !!available?.other_folder || tone === 'downloading' || busyAction === `e${e.id}`} onclick={(ev) => { ev.stopPropagation(); void epSearch({ slot_id: st.id }, `e${e.id}`, t('discover.titleLibrary.searchingEpisode', { episode: e.episode })); }}><Icon name="search" size={14} /></button>
+													<button type="button" class="lib-ico" title={t('discover.titleLibrary.chooseAReleaseFor3')} aria-label={t('discover.titleLibrary.chooseAReleaseFor4', { episode: e.episode })} disabled={!aired} onclick={(ev) => { ev.stopPropagation(); own.openPick({ label: `S${String(se.number).padStart(2, "0")}E${String(e.episode).padStart(2, "0")}`, query: `slot_id=${st.id}`, body: { slot_id: st.id } }); }}><Icon name="grid" size={14} /></button>
 												</span>
 											{/if}
 										</div>
@@ -482,8 +484,9 @@
 							{#if eo.outsideOpen}
 								<div class="lib-eps">
 									{#each eo.outside as e (e.id)}
-										{@const tone = epTone(e.slots[0]?.state ?? '')}
-										<div class="lib-ep {tone}"><span class="lib-ep-still">{#if e.still}<img src={e.still.replace('/w780/', '/w300/')} alt="" loading="lazy" decoding="async" />{/if}<span class="lib-ep-n">{e.episode}</span></span><button type="button" class="lib-ep-text" aria-label={t('discover.titleLibrary.episodeNamed', { episode: e.episode, name: e.name ?? '' })} onclick={() => { epPicked = e; epOpen = true; }}><b>{e.name ?? t('discover.titleLibrary.episodeN', { episode: e.episode })}</b><small>{[t('discover.titleLibrary.seasonN', { n: e.season ?? 0 }), epFile(e)].filter(Boolean).join(' · ')}</small></button><span class="lib-ep-st {tone}"><span class="own-dot {tone}" aria-hidden="true"></span>{epQuality(e) || serverWords(e.slots[0]?.state_label) || t('discover.titleLibrary.missing')}</span></div>
+										{@const available = availableEpisodeSlot(e.slots)}
+										{@const tone = epTone(available?.state ?? '', !!available?.file)}
+										<div class="lib-ep {tone}"><span class="lib-ep-still">{#if e.still}<img src={e.still.replace('/w780/', '/w300/')} alt="" loading="lazy" decoding="async" />{/if}<span class="lib-ep-n">{e.episode}</span></span><button type="button" class="lib-ep-text" aria-label={t('discover.titleLibrary.episodeNamed', { episode: e.episode, name: e.name ?? '' })} onclick={() => { epPicked = e; epOpen = true; }}><b>{e.name ?? t('discover.titleLibrary.episodeN', { episode: e.episode })}</b><small>{[t('discover.titleLibrary.seasonN', { n: e.season ?? 0 }), epFile(e)].filter(Boolean).join(' · ')}</small></button><span class="lib-ep-st {tone}"><span class="own-dot {tone}" aria-hidden="true"></span>{epQuality(e) || serverWords(available?.state_label) || t('discover.titleLibrary.missing')}</span></div>
 									{/each}
 								</div>
 							{/if}

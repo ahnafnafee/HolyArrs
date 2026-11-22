@@ -430,12 +430,15 @@ func serve(ctx context.Context, c config, o runOpts) error {
 	var md metadata.Provider = hosted.TMDB()
 	showMD := showSources(vault, hosted)
 	var artistMD metadata.ArtistProvider = musicSource(s, version)
-	// Music lookups go through the metadata server only: an install never
-	// asks MusicBrainz itself. A MusicBrainz stand-in (tests) is asked
-	// directly; HOLYARRS_DIRECT_SOURCES=1 (developers only) keeps the real
-	// MusicBrainz behind the server for its fallbacks.
+	// Keep hosted artist and album metadata, with a MusicBrainz fallback
+	// for track lists people open. Both direct clients share the same limiter.
 	if os.Getenv("HOLYARRS_MUSICBRAINZ_URL") == "" {
-		artistMD = hosted.Service.Artists(ownMusic(s, version, hosted))
+		direct := ownMusic(s, version, hosted)
+		trackSource := musicSource(s, version)
+		trackSource.Allowed = hosted.Modes.Server
+		direct.Limiter = &metadata.Limiter{}
+		trackSource.Limiter = direct.Limiter
+		artistMD = hosted.Service.ArtistsWithTrackFallback(direct, trackSource.Pressings)
 	}
 	pictures := artistImages()
 	// Pictures come from public addresses only; a picture stand-in named

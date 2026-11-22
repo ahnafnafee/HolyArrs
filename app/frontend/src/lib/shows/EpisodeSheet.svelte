@@ -3,6 +3,7 @@
 	import { chosenWhy } from './labels.ts';
 	// Side sheet for one episode: status, file facts, subtitles and history.
 	import Sheet from '#lib/ui/Sheet.svelte';
+	import { availableEpisodeSlot } from '#lib/core/episodes.ts';
 	import Icon from '#lib/ui/Icon.svelte';
 	import Menu, { type MenuItem } from '#lib/ui/Menu.svelte';
 	import { qualityBadges } from '#lib/mediafiles/index.ts';
@@ -28,7 +29,7 @@
 		still?: string;
 		keep_up_to_date?: boolean;
 		outside_order?: boolean;
-		slots: { id: number; state: string; state_label: string; reason?: string; file?: Record<string, any> | null }[];
+		slots: { id: number; state: string; state_label: string; reason?: string; file_id?: number; other_folder?: boolean; file?: Record<string, any> | null }[];
 	};
 
 	let {
@@ -71,7 +72,7 @@
 		{ label: t('shows.sheet.lookSubs'), icon: 'search', onselect: () => void findSubs() },
 		{ label: t('shows.sheet.chooseSub'), icon: 'copy', onselect: () => (subsMore = true) }
 	]);
-	const slot = $derived(ep?.slots[0]);
+	const slot = $derived(availableEpisodeSlot(ep?.slots ?? []));
 	const file = $derived(slot?.file ?? null);
 	// Collapses the many slot states into the four the sheet styles.
 	const tone = $derived.by(() => {
@@ -137,7 +138,7 @@
 		}
 	}
 	async function look() {
-		if (!slot) return;
+		if (!slot || slot.other_folder) return;
 		busy = 'look';
 		try {
 			await api.post(`/titles/${titleId}/search`, { slot_id: slot.id });
@@ -187,7 +188,7 @@
 			{#if tone !== 'have'}
 				<section class="es-status {tone}">
 					<span class="es-st-wrap"><span class="es-st"><span class="es-dot" aria-hidden="true"></span>{serverWords(slot?.state_label) ?? t('shows.sheet.missing')}</span>{#if manage && chosenWhy(slot)}<small class="es-why" data-testid="episode-chosen-why">{serverWords(chosenWhy(slot))}</small>{/if}</span>
-					{#if manage && slot && tone !== 'downloading'}<button type="button" class="es-btn primary" disabled={busy === 'look'} onclick={look}><Icon name="search" size={15} />{t('shows.sheet.lookForIt')}</button>{/if}
+					{#if manage && slot && !slot.other_folder && tone !== 'downloading'}<button type="button" class="es-btn primary" disabled={busy === 'look'} onclick={look}><Icon name="search" size={15} />{t('shows.sheet.lookForIt')}</button>{/if}
 				</section>
 			{/if}
 
