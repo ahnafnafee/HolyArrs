@@ -1,3 +1,5 @@
+ARG HOLYARRS_RUNTIME_IMAGE=scratch
+
 # Web stage: builds the app's pages from this commit's source and lockfile,
 # so an image from any commit always shows that commit's pages. It runs on
 # the build machine for every target; Node never reaches the final image.
@@ -51,10 +53,9 @@ RUN set -eu; \
 # /tmp anyone may write (Move's working copies, temporary files).
 RUN mkdir -p /out/config /out/tmp && chown 1000:1000 /out/config && chmod 1777 /out/tmp
 
-# Final stage: an empty image with only HolyArrs, CA certificates and the
-# licences. No shell and no system tools: HolyArrs is one static Go program
-# with its own time zone database, RAR/7z/zip reader and healthcheck.
-FROM scratch
+# The default runtime contains the static app, CA certificates and licenses.
+# Deployments can opt into a base containing an audio sync executable.
+FROM ${HOLYARRS_RUNTIME_IMAGE}
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="HolyArrs" \
       org.opencontainers.image.source="https://github.com/HolyArrs/HolyArrs" \

@@ -319,6 +319,12 @@ func (s *Service) fetchAndSave(ctx context.Context, fc *fileCtx, t target, c Sco
 	if siteID != 0 {
 		row.SiteID = &siteID
 	}
+	if !row.Forced {
+		if aligned, ok := alignSubtitleToAudio(ctx, fc, text, e.Format); ok {
+			text = aligned
+			row.Sync["method"] = "audio"
+		}
+	}
 	p, err := s.save(ctx, fc, &row, text, e.Format, set, t.old, by)
 	if err != nil {
 		s.failed(ctx, fc, t.want, c.Site, err, by)
