@@ -456,16 +456,18 @@ type Query struct {
 
 // Item is one search result, before parsing and judging.
 type Item struct {
-	Title     string
-	GUID      string
-	Link      string
-	Size      int64
-	Protocol  string
-	Seeders   *int
-	Peers     *int
-	Published time.Time
-	InfoHash  string
-	Files     int
+	Title      string
+	GUID       string
+	Link       string
+	Size       int64
+	Protocol   string
+	Seeders    *int
+	Peers      *int
+	Published  time.Time
+	CoverURL   string
+	DetailsURL string
+	InfoHash   string
+	Files      int
 	// TVDB and IMDb are the ids the Source gives for the release's show
 	// (IMDb as digits with no leading zeros); 0 and "" when it gives none.
 	TVDB int
@@ -478,6 +480,7 @@ type rssXML struct {
 		GUID      string `xml:"guid"`
 		Link      string `xml:"link"`
 		Size      int64  `xml:"size"`
+		Comments  string `xml:"comments"`
 		PubDate   string `xml:"pubDate"`
 		Enclosure struct {
 			URL    string `xml:"url,attr"`
@@ -724,7 +727,7 @@ func parseItems(body []byte, protocol string) ([]Item, error) {
 	}
 	out := make([]Item, 0, len(x.Items))
 	for _, it := range x.Items {
-		i := Item{Title: strings.TrimSpace(it.Title), GUID: it.GUID, Link: it.Enclosure.URL, Size: it.Enclosure.Length, Protocol: protocol}
+		i := Item{Title: strings.TrimSpace(it.Title), GUID: it.GUID, Link: it.Enclosure.URL, Size: it.Enclosure.Length, Protocol: protocol, DetailsURL: strings.TrimSpace(it.Comments)}
 		if i.Link == "" {
 			i.Link = strings.TrimSpace(it.Link)
 		}
@@ -745,6 +748,8 @@ func parseItems(body []byte, protocol string) ([]Item, error) {
 		}
 		for _, a := range it.Attrs {
 			switch strings.ToLower(a.Name) {
+			case "coverurl":
+				i.CoverURL = strings.TrimSpace(a.Value)
 			case "seeders":
 				if n, err := strconv.Atoi(a.Value); err == nil {
 					i.Seeders = &n

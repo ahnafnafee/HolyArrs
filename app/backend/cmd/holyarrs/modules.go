@@ -36,6 +36,9 @@ func (a *handlers) sourceHandlers() *sources.Handlers {
 		if a.s.Live != nil {
 			h.Live = a.s.Live
 		}
+		h.QueueNSFW = func(ctx context.Context, src domain.Source, item sources.Item) (string, error) {
+			return a.s.Downloads.QueueNSFW(ctx, src, item)
+		}
 		a.sourceH = h
 	})
 	return a.sourceH

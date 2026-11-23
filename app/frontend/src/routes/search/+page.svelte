@@ -17,7 +17,7 @@
 	import { createSearchArtists } from '#lib/discover/index.ts';
 	import { createSearchRecent } from '#lib/discover/index.ts';
 	import { createSearchBrowse } from '#lib/discover/index.ts';
-	import { type IconName } from '#lib/ui/Icon.svelte';
+	import SearchScopes, { standardSearchScopes } from '#lib/discover/SearchScopes.svelte';
 	import Button from '#lib/ui/Button.svelte';
 	import SegmentedControl from '#lib/ui/SegmentedControl.svelte';
 	import Shelf from '#lib/ui/Shelf.svelte';
@@ -33,12 +33,12 @@
 	import type { LookupArtist, MusicSettings } from '#lib/music/index.ts';
 	import { AddArtistDialog, AskArtistDialog, QuickAsk } from '#lib/requests/index.ts';
 	import { createLatestOnly } from '#lib/downloads/index.ts';
-	import { partOn, partsNow, refreshParts, posterStatus } from '#lib/mediafiles/index.ts';
+	import { partsNow, refreshParts, posterStatus } from '#lib/mediafiles/index.ts';
 	import { onMount, tick, untrack } from 'svelte';
 	import { afterNavigate, beforeNavigate, goto, snapshot } from '$app/navigation';
 	import { page } from '$app/state';
 	import { to } from '#lib/core/paths.ts';
-	import { focusOnOpen, forgetReturn, playFieldEntry, searchField, searchHooks } from '#lib/core/search-field.svelte.ts';
+	import { focusOnOpen, forgetReturn, playFieldEntry, nsfwScope, searchField, searchHooks } from '#lib/core/search-field.svelte.ts';
 	import { api, message, ApiError, isSourceOff } from '#lib/core/api.ts';
 	import { session } from '#lib/core/session.svelte.ts';
 	import { reducedMotion } from '#lib/core/motion.ts';
@@ -94,15 +94,7 @@
 	const who = $derived(audienceOf(session.can));
 	const manage = $derived(session.can('manage_library'));
 
-	const scopeOptions = $derived(
-		([
-			{ value: 'all', label: t('discover.search.all'), icon: 'grid' },
-			{ value: 'people', label: t('discover.search.people'), icon: 'people' },
-			{ value: 'movie', label: t('discover.search.movies'), icon: 'film' },
-			{ value: 'show', label: t('discover.search.tvShows'), icon: 'tv' },
-			{ value: 'music', label: t('discover.search.music'), icon: 'music' }
-		] as { value: SearchScope; label: string; icon: IconName }[]).filter((o) => (o.value === 'show' ? partOn('shows') : o.value === 'movie' ? partOn('movies') : o.value === 'music' ? partOn('music') : true))
-	);
+	const scopeOptions = $derived(standardSearchScopes());
 	// The Browse sections' headings come from the server in English; known ones show in the app's language.
 	const SECTION_KEYS: Record<string, string> = { genres: 'discover.searchSections.genres', moods: 'discover.searchSections.moods', stories: 'discover.searchSections.stories', worlds: 'discover.searchSections.worlds', eras: 'discover.searchSections.eras', world: 'discover.searchSections.world', collections: 'discover.searchSections.collections' };
 	const sectionTitle = (s: { id: string; title: string }) => (SECTION_KEYS[s.id] ? t(SECTION_KEYS[s.id]) : s.title);
@@ -478,11 +470,12 @@
 	<div class="phone-field"><SearchField searchKey="" testid="search-box-phone" id="q-phone" closable={false} /></div>
 	<MetadataNotice />
 
-	{#if scopeOptions.length > 2}
-		<div class="types" data-pin-pills>
-			<SegmentedControl options={scopeOptions} value={scope} label={t('discover.search.lookIn')} testid="search-scope" onchange={setScope} />
-		</div>
-	{/if}
+	<SearchScopes value={scope} onchange={(value) => {
+		if (value === 'nsfw') {
+			nsfwScope.term = searchField.term.trim();
+			void goto(to('/search/nsfw'));
+		} else setScope(value);
+	}} />
 
 	{#if searchField.term.trim()}
 		<div class="results-head" data-testid="search-results-head">
@@ -747,12 +740,6 @@
 	/* Phones only: the top bar (and its field) is hidden under 768 px. */
 	.phone-field { display: none; }
 	@media (max-width: 767px) { .phone-field { position: sticky; top: 8px; z-index: 22; display: flex; justify-content: center; } .phone-field :global(.ui-search) { width: 100%; } }
-	/* The same floating glass pill as Explore's type switch. */
-	.types { display: flex; justify-content: center; pointer-events: none; }
-	.types :global(.ui-seg) { pointer-events: auto; background: color-mix(in srgb, var(--surface-2) 70%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 10px 30px rgb(0 0 0 / 0.28), 0 0 0 0.5px color-mix(in srgb, var(--text) 14%, transparent); }
-	@media (max-width: 767px) { .types :global(.ui-seg) { display: grid; width: 100%; } .types :global(.ui-seg button) { padding: 0 6px; } }
-	/* Narrow phones: the words stay (they say more than the icons), the icons go, so five kinds fit in one row; a long word wraps, never cut. */
-	@media (max-width: 419px) { .types :global(.ui-seg button) { padding: 0 2px; font-size: 12.5px; } .types :global(.ui-seg button .icon), .types :global(.ui-seg button svg) { display: none; } }
 	.results-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; margin-bottom: -12px; }
 	.results-head .count { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.results-head :global(.ui-seg) { flex: none; }

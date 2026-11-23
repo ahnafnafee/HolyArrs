@@ -1,6 +1,7 @@
 package sources
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"sync"
@@ -29,7 +30,11 @@ type Handlers struct {
 	Catalog Catalog
 	OldApps OldApps
 	// PartOn says whether a part of the app (Shows, Movies) is switched on.
-	PartOn func(parts.Part) bool
+	PartOn    func(parts.Part) bool
+	QueueNSFW func(context.Context, domain.Source, Item) (string, error)
+
+	nsfwMu       sync.Mutex
+	nsfwSearches map[int64]nsfwSearch
 
 	bridgeOnce  sync.Once
 	bridgeSvc   *BridgeService
@@ -55,6 +60,9 @@ func (h *Handlers) sourceRoutes(m *webserver.Router) {
 	m.Handle("GET /api/v1/sources/{id}/stats", webserver.PermManageLibrary, http.HandlerFunc(h.sourceStats))
 	m.Handle("POST /api/v1/sources/{id}/try", webserver.PermSettings, http.HandlerFunc(h.trySource))
 	m.Handle("POST /api/v1/sources/check", webserver.PermSettings, http.HandlerFunc(h.checkSources))
+	m.Handle("POST /api/v1/sources/nsfw-search", webserver.PermSettings, http.HandlerFunc(h.searchNSFW))
+	m.Handle("GET /api/v1/sources/nsfw-search/{token}/thumbnail", webserver.PermSettings, http.HandlerFunc(h.nsfwThumbnail))
+	m.Handle("POST /api/v1/sources/nsfw-search/{token}/download", webserver.PermSettings, http.HandlerFunc(h.downloadNSFW))
 	m.Handle("GET /api/v1/titles/{id}/search-outcome", webserver.NeedSignedIn, http.HandlerFunc(h.searchOutcome))
 }
 

@@ -10,6 +10,9 @@ export const searchField = $state({ term: '' });
 // Download-page scope toggle and its own search text.
 export const dlScope = $state({ on: false, off: false, term: '' });
 
+// NSFW release searches have their own text and submit action.
+export const nsfwScope = $state<{ term: string; submit?: () => void; exit?: () => void }>({ term: '' });
+
 // Lets the active page react to submit, blur and exit of the box.
 export const searchHooks: Hooks = {};
 

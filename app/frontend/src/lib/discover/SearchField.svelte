@@ -6,7 +6,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { appPath, to } from '../core/paths.ts';
-	import { dlScope, registerField, rememberReturn, searchField, searchHooks } from '../core/search-field.svelte.ts';
+	import { dlScope, nsfwScope, registerField, rememberReturn, searchField, searchHooks } from '../core/search-field.svelte.ts';
 	import { api } from '../core/api.ts';
 	import { inSettings, settingsFind } from '../core/settings-find.svelte.ts';
 
@@ -20,7 +20,13 @@
 	const scoped = $derived(dlScope.on && !dlScope.off && appPath(page.url.pathname).startsWith('/downloads'));
 	// In Settings the field searches settings instead, with results on the Settings home.
 	const settings = $derived(inSettings(appPath(page.url.pathname)));
-	const shown = $derived(settings ? settingsFind.term : scoped ? dlScope.term : searchField.term);
+	const nsfw = $derived(appPath(page.url.pathname) === '/search/nsfw');
+	const shown = $derived(nsfw ? nsfwScope.term : settings ? settingsFind.term : scoped ? dlScope.term : searchField.term);
+	$effect(() => {
+		if (!nsfw) return;
+		close();
+		waiting = false;
+	});
 	function settingsTyped(v: string) {
 		settingsFind.term = v;
 		if (appPath(page.url.pathname) !== '/settings' && v.trim()) void goto(to('/settings')).then(() => el?.focus());
@@ -101,6 +107,10 @@
 	}
 	function submitted(e: SubmitEvent) {
 		e.preventDefault();
+		if (nsfw) {
+			nsfwScope.submit?.();
+			return;
+		}
 		if (scoped) return;
 		close();
 		if (onSearch()) searchHooks.submit?.();
@@ -151,6 +161,13 @@
 	const one = $derived(here && closable);
 	function clearOrClose() {
 		close();
+		if (nsfw) {
+			if (nsfwScope.term) {
+				nsfwScope.term = '';
+				el?.focus();
+			} else nsfwScope.exit?.();
+			return;
+		}
 		if (searchField.term) {
 			searchField.term = '';
 			el?.focus();
@@ -161,8 +178,11 @@
 <form class="ui-search" role="search" onsubmit={submitted}>
 	<span class="glow" aria-hidden="true"></span>
 	<span class="ic" aria-hidden="true"><Icon name="search" size={18} /></span>
-	<label class="sr-only" for={id}>{settings ? t('discover.searchField.searchSettings') : t('discover.searchField.searchForATitle')}</label>
-	{#if settings}
+	<label class="sr-only" for={id}>{nsfw ? t('discover.nsfw.query') : settings ? t('discover.searchField.searchSettings') : t('discover.searchField.searchForATitle')}</label>
+	{#if nsfw}
+		<input {id} bind:this={el} type="search" value={shown} maxlength="200" oninput={(e) => (nsfwScope.term = e.currentTarget.value)} onkeydown={(e) => { if (e.key === 'Escape') { e.preventDefault(); clearOrClose(); } }} placeholder={t('discover.nsfw.query')} autocomplete="off" spellcheck="false" enterkeyhint="search" data-testid={testid} />
+		{#if shown.trim()}<button type="submit" class="clear" aria-label={t('discover.search.search')}><Icon name="search" size={16} /></button>{/if}
+	{:else if settings}
 	<input {id} bind:this={el} type="search" value={shown} oninput={(e) => settingsTyped(e.currentTarget.value)} onkeydown={settingsKey} placeholder={t('discover.searchField.searchSettings')} autocomplete="off" spellcheck="false" enterkeyhint="search" data-testid={testid} />
 	{#if shown}<button type="button" class="clear" tabindex="-1" aria-label={t('discover.searchField.clearTheSearch')} onclick={() => { settingsFind.term = ''; el?.focus(); }}><Icon name="x" size={14} /></button>{:else}<kbd class="hint" aria-hidden="true">{searchKey}</kbd>{/if}
 	{:else}
@@ -174,7 +194,7 @@
 		<kbd class="hint" aria-hidden="true">{searchKey}</kbd>
 	{/if}
 	{/if}
-	{#if one && !settings}<button type="button" class="close" aria-label={searchField.term ? t('discover.searchField.clear') : t('discover.searchField.close')} title={searchField.term ? t('discover.searchField.clear') : t('discover.searchField.close')} data-testid="search-close" onclick={clearOrClose}><Icon name="x" size={16} /></button>{/if}
+	{#if one && !settings}<button type="button" class="close" aria-label={shown ? t('discover.searchField.clear') : t('discover.searchField.close')} title={shown ? t('discover.searchField.clear') : t('discover.searchField.close')} data-testid="search-close" onclick={clearOrClose}><Icon name="x" size={16} /></button>{/if}
 	{#if answer || waiting}<GlassDropdown {answer} {active} id={listId} onpick={pick} onword={word} />{/if}
 </form>
 

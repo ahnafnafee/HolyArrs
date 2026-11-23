@@ -44,6 +44,7 @@ var pinSMRoutes = []pinSMRoute{
 	{"POST /api/v1/sources/1/resume", "settings", 401, 403, 404, "error"},
 	{"POST /api/v1/sources/1/try", "settings", 401, 403, 404, "error"},
 	{"POST /api/v1/sources/check", "settings", 401, 403, 200, "kind query sources"},
+	{"POST /api/v1/sources/nsfw-search", "settings", 401, 403, 400, "error"},
 	{"POST /api/v1/titles/1/search", "", 401, 403, 404, "error"},
 	{"GET /api/v1/titles/1/releases", "", 401, 403, 404, "error"},
 	{"POST /api/v1/releases/1/choose", "", 401, 403, 404, "error"},
