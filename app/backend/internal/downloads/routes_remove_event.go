@@ -55,15 +55,20 @@ func (a *Web) manyChangedEvent(r *http.Request, downloaderID int64, keys []strin
 func (a *Web) itemEvent(r *http.Request, downloaderID int64, key, kind, verb string, data map[string]any) {
 	ctx := context.WithoutCancel(r.Context())
 	db := a.Store.Read()
-	var client, name string
+	var client, name, category string
 	_ = db.QueryRowContext(ctx, "SELECT name FROM downloaders WHERE id = ?", downloaderID).Scan(&client)
 	if client != "" {
 		data["downloader"] = client
 	}
-	_ = db.QueryRowContext(ctx, "SELECT name FROM dl_items WHERE downloader_id = ? AND lower(key) = lower(?)", downloaderID, key).Scan(&name)
+	_ = db.QueryRowContext(ctx, "SELECT name, category FROM dl_items WHERE downloader_id = ? AND lower(key) = lower(?)", downloaderID, key).Scan(&name, &category)
 	e := &domain.Event{Actor: actor(r), Kind: kind, Data: data}
+	if snapshot, ok := a.clientSnapshotItem(downloaderID, key); ok && isStandaloneSearchCategory(snapshot.Category) || isStandaloneSearchCategory(category) {
+		name = ""
+		delete(data, "hash")
+		key = ""
+	}
 	var dlID int64
-	if db.QueryRowContext(ctx, "SELECT id FROM downloads WHERE downloader_id = ? AND lower(external_id) = lower(?) ORDER BY id DESC LIMIT 1", downloaderID, key).Scan(&dlID) == nil {
+	if key != "" && db.QueryRowContext(ctx, "SELECT id FROM downloads WHERE downloader_id = ? AND lower(external_id) = lower(?) ORDER BY id DESC LIMIT 1", downloaderID, key).Scan(&dlID) == nil {
 		e.DownloadID = &dlID
 		var rel string
 		if db.QueryRowContext(ctx, "SELECT r.name FROM downloads d JOIN releases r ON r.id = d.release_id WHERE d.id = ?", dlID).Scan(&rel) == nil && name == "" {

@@ -21,7 +21,7 @@ func raw(t *testing.T, p Patch) json.RawMessage {
 func TestMergePatch_Sequence(t *testing.T) {
 	a := Patch{Kind: KindPatch, Boot: "b", Client: 3, FromRev: 4, ToRev: 5,
 		Upsert: []map[string]any{{"key": "3:a", "progress": 0.1, "speed": 5.0}, {"key": "3:b", "progress": 0.2}},
-		Remove: []string{"3:c"}, Totals: &PatchTotals{Speed: 1}}
+		Remove: []string{"3:c"}, Totals: &PatchTotals{Speed: 1}, Refresh: true}
 	b := Patch{Kind: KindPatch, Boot: "b", Client: 3, FromRev: 5, ToRev: 7,
 		Upsert: []map[string]any{{"key": "3:a", "progress": 0.4}, {"key": "3:c", "name": "back"}},
 		Remove: []string{"3:b"}, Totals: &PatchTotals{Speed: 9}}
@@ -29,7 +29,7 @@ func TestMergePatch_Sequence(t *testing.T) {
 	if err := json.Unmarshal(MergePatch(raw(t, a), raw(t, b)), &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.FromRev != 4 || m.ToRev != 7 || m.Totals.Speed != 9 {
+	if m.FromRev != 4 || m.ToRev != 7 || m.Totals.Speed != 9 || !m.Refresh {
 		t.Fatalf("revs/totals %+v", m)
 	}
 	ups := map[string]map[string]any{}

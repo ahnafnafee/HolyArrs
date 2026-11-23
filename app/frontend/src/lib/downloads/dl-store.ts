@@ -2,6 +2,7 @@
 import type { DownloadRow } from '../core/types.ts';
 
 export type DlPatch = {
+	refresh?: boolean;
 	kind: 'patch';
 	boot?: string;
 	client: number;

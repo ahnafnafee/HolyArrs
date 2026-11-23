@@ -181,6 +181,8 @@ func (a *Web) PublishDL(ctx context.Context, id int64, fromRev, toRev uint64, pr
 	for _, ext := range ch.Added {
 		k, c := keyOf(ext), cur[ext]
 		switch {
+		case isStandaloneSearchCategory(c.Category):
+			mgr.Refresh = true
 		case own.keys[k]:
 			upsertOwn(k, Job{}, c, true)
 		case outsideShown:
@@ -202,6 +204,8 @@ func (a *Web) PublishDL(ctx context.Context, id int64, fromRev, toRev uint64, pr
 	for _, fc := range ch.Changed {
 		k, p, c := keyOf(fc.ID), prev[fc.ID], cur[fc.ID]
 		switch {
+		case isStandaloneSearchCategory(p.Category) || isStandaloneSearchCategory(c.Category):
+			mgr.Refresh = true
 		case own.keys[k]:
 			upsertOwn(k, p, c, false)
 		case outsideShown:
@@ -213,6 +217,10 @@ func (a *Web) PublishDL(ctx context.Context, id int64, fromRev, toRev uint64, pr
 		}
 	}
 	for _, ext := range ch.Removed {
+		if isStandaloneSearchCategory(prev[ext].Category) {
+			mgr.Refresh = true
+			continue
+		}
 		// HolyArrs' own rows leave the page through the Manager's writes.
 		if k := keyOf(ext); !own.keys[k] && outsideShown {
 			mgr.Remove = append(mgr.Remove, k)
@@ -235,6 +243,9 @@ func (a *Web) dlTotals() *PatchTotals {
 	t := &PatchTotals{}
 	for id := range a.DLSync.Store.Revs() {
 		for _, j := range a.DLSync.Store.Current(id).Items {
+			if isStandaloneSearchCategory(j.Category) {
+				continue
+			}
 			if j.State == StateDownloading {
 				t.Speed += j.Speed
 			}

@@ -32,6 +32,7 @@ type Patch struct {
 	Upsert  []map[string]any `json:"upsert,omitempty"`
 	Remove  []string         `json:"remove,omitempty"`
 	Totals  *PatchTotals     `json:"totals,omitempty"`
+	Refresh bool             `json:"refresh,omitempty"`
 	// Fields below are set on health events only.
 	Health string     `json:"health,omitempty"`
 	Name   string     `json:"name,omitempty"`
@@ -80,7 +81,7 @@ func MergePatch(old, cur json.RawMessage) json.RawMessage {
 	if a.Kind != KindPatch || b.Kind != KindPatch || a.Client != b.Client || a.Boot != b.Boot || a.ToRev != b.FromRev {
 		return cur
 	}
-	out := Patch{Kind: KindPatch, Boot: b.Boot, Client: b.Client, FromRev: a.FromRev, ToRev: b.ToRev, Totals: b.Totals}
+	out := Patch{Kind: KindPatch, Boot: b.Boot, Client: b.Client, FromRev: a.FromRev, ToRev: b.ToRev, Totals: b.Totals, Refresh: a.Refresh || b.Refresh}
 	if out.Totals == nil {
 		out.Totals = a.Totals
 	}

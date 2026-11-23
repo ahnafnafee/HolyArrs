@@ -320,6 +320,9 @@ func phase(d domain.Download, slot string) string {
 }
 
 func (a *Web) DownloadsView(w http.ResponseWriter, r *http.Request) {
+	if maySeeStandaloneSearch(r.Context()) {
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
 	// People who may not manage the Library watch only the downloads for
 	// titles they asked for, and act on none of them.
 	// (No person on the request: the sign-in layer is off, as in tests.)

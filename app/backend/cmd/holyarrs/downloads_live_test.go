@@ -39,6 +39,7 @@ func TestPublishDLAudiences(t *testing.T) {
 
 	own := "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
 	out := strings.Repeat("e", 40)
+	standalone := strings.Repeat("1", 40)
 	prev := map[string]downloads.Job{
 		own: {ID: own, Name: "Salt", Progress: 0.3, Speed: 100, State: downloads.StateDownloading},
 		out: {ID: out, Name: "Secret.Outside", Progress: 0.1, State: downloads.StateDownloading},
@@ -47,6 +48,7 @@ func TestPublishDLAudiences(t *testing.T) {
 		own:           {ID: own, Name: "Salt", Progress: 0.5, Speed: 200, State: downloads.StateDownloading},
 		out:           {ID: out, Name: "Secret.Outside", Progress: 0.2, State: downloads.StateDownloading},
 		"f" + out[1:]: {ID: "f" + out[1:], Name: "New.Outside", State: downloads.StateQueued},
+		standalone:    {ID: standalone, Name: "Private.Release", Category: "nsfw", State: downloads.StateQueued},
 	}
 	x.api.DownloadsWeb().PublishDL(ctx, dlr, 4, 5, prev, cur)
 	gone := map[string]downloads.Job{own: cur[own]}
@@ -69,6 +71,9 @@ func TestPublishDLAudiences(t *testing.T) {
 	}
 	if _, ok := keys[k(out)]["name"]; ok {
 		t.Fatalf("changed outside row carries unchanged fields: %+v", keys[k(out)])
+	}
+	if keys[k(standalone)] != nil || !mgr[0].Refresh || !mgr[1].Refresh {
+		t.Fatalf("private row details must use the Downloads view: %+v", mgr)
 	}
 	if mgr[0].FromRev != 4 || mgr[0].ToRev != 5 || mgr[1].FromRev != 5 || len(mgr[1].Remove) != 2 || mgr[0].Totals == nil {
 		t.Fatalf("manager revs/removes %+v", mgr)

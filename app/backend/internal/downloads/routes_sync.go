@@ -42,7 +42,7 @@ func (a *Web) storeRows(ctx context.Context, names map[int64]domain.Downloader, 
 		health = append(health, syncHealth(d, snap))
 		out := make([]DownloadRow, 0, len(snap.Items))
 		for _, j := range snap.Items {
-			if j.ID == "" || shown[clientKey{d.ID, strings.ToLower(j.ID)}] || hiddenItem(d, j) {
+			if j.ID == "" || shown[clientKey{d.ID, strings.ToLower(j.ID)}] || hideClientItem(ctx, d, j) {
 				continue
 			}
 			out = append(out, clientRow(d, j))
@@ -186,6 +186,9 @@ func TorrentLines(prev, cur Job) []LogLine {
 // leaves the choices in the Confirm match list. It adds a missing title
 // only with downloads_auto_add on.
 func (a *Web) MatchLinkOnly(ctx context.Context, downloaderID int64, key, name, category string) (string, int64, error) {
+	if isStandaloneSearchCategory(category) {
+		return matchOtherApp, 0, nil
+	}
 	db := a.Store.Read()
 	key = strings.ToLower(key)
 	var n int

@@ -168,6 +168,8 @@
 			clientHealth = clientHealth.some((c) => c.id === h.id) ? clientHealth.map((c) => (c.id === h.id ? { ...h, name: h.name || c.name } : c)) : [...clientHealth, h];
 			return;
 		}
+		// Standalone search details come from the permission-filtered view.
+		if (data.refresh) soon();
 		const out = applyPatch(rows, sync, data, withId);
 		if (out.kind === 'reread') {
 			if (out.client === undefined) soon();

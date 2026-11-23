@@ -289,10 +289,14 @@ func (a *Web) onItem(r *http.Request, write bool, call func(e Engine, id string)
 	if err != nil {
 		return ErrNoDownloader
 	}
-	if write && a.notOurs(r.Context(), id, []string{r.PathValue("hash")}) {
+	ctx, hash := r.Context(), r.PathValue("hash")
+	if write && a.notOurs(ctx, id, []string{hash}) {
 		return ErrNotOurs
 	}
-	err = a.Manager().ControlItem(r.Context(), id, r.PathValue("hash"), write, call)
+	if j, ok := a.clientSnapshotItem(id, hash); ok && isStandaloneSearchCategory(j.Category) && !maySeeStandaloneSearch(ctx) {
+		return ErrNotFound
+	}
+	err = a.Manager().ControlItem(ctx, id, hash, write, call)
 	if err == nil && write {
 		a.Manager().Kick(id) // the reader shows the change at once
 	}

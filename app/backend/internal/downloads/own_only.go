@@ -31,24 +31,35 @@ func hiddenItem(d domain.Downloader, j Job) bool {
 	return d.OwnOnly && !ownCategory(d.Categories(), j.Category)
 }
 
-// notOurs reports whether any of hashes is another app's item on a Downloader
-// set to show only its own. The categories come from the background reader's
-// snapshot, so no client call is made; an item the snapshot does not hold is
-// not refused here.
+// hideClientItem is the Downloads view's category boundary. Standalone
+// search downloads keep their separate folder and require settings access.
+func hideClientItem(ctx context.Context, d domain.Downloader, j Job) bool {
+	if isStandaloneSearchCategory(j.Category) {
+		return !maySeeStandaloneSearch(ctx)
+	}
+	return hiddenItem(d, j)
+}
+
+func (a *Web) clientSnapshotItem(downloaderID int64, hash string) (Job, bool) {
+	if a.DLSync == nil {
+		return Job{}, false
+	}
+	j, ok := a.DLSync.Store.Current(downloaderID).Items[strings.ToLower(hash)]
+	return j, ok
+}
+
+// notOurs checks the reader's snapshot before changing client items.
 func (a *Web) notOurs(ctx context.Context, downloaderID int64, hashes []string) bool {
 	if a.DLSync == nil || len(hashes) == 0 {
 		return false
 	}
 	var d domain.Downloader
-	if database.Get(ctx, a.read(), "downloaders", downloaderID, &d) != nil || !d.OwnOnly {
+	if database.Get(ctx, a.read(), "downloaders", downloaderID, &d) != nil {
 		return false
 	}
-	want := map[string]bool{}
-	for _, h := range hashes {
-		want[strings.ToLower(h)] = true
-	}
-	for _, j := range a.DLSync.Store.Current(downloaderID).Items {
-		if want[strings.ToLower(j.ID)] && hiddenItem(d, j) {
+	items := a.DLSync.Store.Current(downloaderID).Items
+	for _, hash := range hashes {
+		if j, ok := items[strings.ToLower(hash)]; ok && hideClientItem(ctx, d, j) {
 			return true
 		}
 	}

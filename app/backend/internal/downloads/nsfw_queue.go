@@ -10,13 +10,25 @@ import (
 
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/database"
 	domain "github.com/HolyArrs/holyarrs/app/backend/internal/core/model"
+	"github.com/HolyArrs/holyarrs/app/backend/internal/core/webserver"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/sources"
 )
+
+const standaloneSearchCategory = "nsfw"
+
+func isStandaloneSearchCategory(category string) bool {
+	return strings.EqualFold(category, standaloneSearchCategory)
+}
+
+func maySeeStandaloneSearch(ctx context.Context) bool {
+	caller, ok := webserver.From(ctx)
+	return ok && webserver.Strong(ctx) && caller.Has(webserver.PermSettings) &&
+		caller.HasScope(webserver.ScopeAdmin) && caller.MaxRating == ""
+}
 
 // QueueNSFW sends a standalone release to its Source's assigned qBittorrent.
 // The explicit category keeps these jobs outside title imports.
 func (m *Manager) QueueNSFW(ctx context.Context, src domain.Source, item sources.Item) (string, error) {
-	const category = "nsfw"
 	if m == nil || src.DownloaderID == nil {
 		return "", errors.New("assign a qBittorrent downloader to this source")
 	}
@@ -31,7 +43,7 @@ func (m *Manager) QueueNSFW(ctx context.Context, src domain.Source, item sources
 	if err != nil {
 		return "", prepareErr
 	}
-	batch := AddBatch{Category: category}
+	batch := AddBatch{Category: standaloneSearchCategory}
 	if !strings.HasPrefix(link, "magnet:") {
 		var rt http.RoundTripper
 		if src.ProxyURL != "" {
@@ -90,7 +102,7 @@ func (m *Manager) QueueNSFW(ctx context.Context, src domain.Source, item sources
 		if err != nil {
 			return err
 		}
-		folder := folders.Categories[category]
+		folder := folders.Categories[standaloneSearchCategory]
 		normalize := func(s string) string { return path.Clean(strings.ReplaceAll(s, "\\", "/")) }
 		if folder == "" || strings.EqualFold(normalize(folder), normalize(folders.Default)) {
 			actionErr = setupErr
@@ -108,8 +120,10 @@ func (m *Manager) QueueNSFW(ctx context.Context, src domain.Source, item sources
 	case out.Duplicates > 0:
 		return "duplicate", nil
 	case out.Pending > 0:
+		m.Kick(downloader.ID)
 		return "pending", nil
 	case out.Added > 0:
+		m.Kick(downloader.ID)
 		return "added", nil
 	default:
 		return "", errors.New("qBittorrent did not confirm the release. Check qBittorrent before retrying")
