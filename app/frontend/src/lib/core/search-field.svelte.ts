@@ -13,6 +13,14 @@ export const dlScope = $state({ on: false, off: false, term: '' });
 // NSFW release searches have their own text and submit action.
 export const nsfwScope = $state<{ term: string; submit?: () => void; exit?: () => void }>({ term: '' });
 
+// On Plugins the box filters the plugin grid instead (no chip, no dropdown).
+export const pluginScope = $state({ on: false, term: '' });
+
+// A page's own tools shown beside the top-bar box (Plugins: filter and Add).
+export const barTools: { snippet: import('svelte').Snippet | null } = $state({ snippet: null });
+// A page's tool shown just before the top-bar box (Plugins: Add).
+export const barLead: { snippet: import('svelte').Snippet | null } = $state({ snippet: null });
+
 // Lets the active page react to submit, blur and exit of the box.
 export const searchHooks: Hooks = {};
 

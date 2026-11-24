@@ -58,6 +58,9 @@ func (t Target) fileName(p releasename.Result, source string) string {
 		return EditionFileName(mediafiles.CleanWith(ns, release)+strings.ToLower(ext), t.Edition)
 	}
 	facts := mediafiles.FactsFrom(t.TitleName, t.Year, t.IDs, p, release, ext)
+	if facts.FrenchVersion == "" && mediafiles.UsesWord(ns.FilePattern, "french_version") {
+		facts.AddFrenchVersion(FrenchVersionOf(source))
+	}
 	if t.Edition != "" {
 		facts.Edition = t.Edition
 	}
@@ -95,6 +98,30 @@ func safeFolder(s string) string {
 		}
 	}
 	return strings.Join(parts, "/")
+}
+
+// showFolder is where a show's episodes go: its stored folder, which may
+// sit in a letter or genre folder (O/The Office), or a new one from the
+// naming settings when none is stored yet.
+func showFolder(ns mediafiles.NamingSettings, stored, name string, year int, ids map[string]string) string {
+	if f := safeFolder(stored); f != "" {
+		return f
+	}
+	return mediafiles.ShowFolderIn(ns, mediafiles.NameFacts{Title: name, Year: year, TMDB: ids["tmdb"], TVDB: ids["tvdb"], IMDB: ids["imdb"]})
+}
+
+// movieFolder is the folder a movie's file goes in, relative to its
+// Library folder: none for a movie kept flat (the file sits at the top of
+// a flat Library folder), else the Version's folder or a new one.
+func movieFolder(ver mediafiles.Version, lf mediafiles.LibraryFolder, title string, year int) string {
+	folder := safeFolder(ver.FolderName)
+	if folder == "" && lf.Flat {
+		return ""
+	}
+	if folder == "" || folder == "." || folder == ".." {
+		folder = FolderName(title, year)
+	}
+	return folder
 }
 
 // FolderName builds the library folder name for a title and year.
@@ -221,6 +248,11 @@ func Plan(cands []Candidate, t Target) []mediafiles.PlanStep {
 					if fm := mediafiles.MatchTitle(fp, []mediafiles.TitleRef{ref}); fm.Title != nil {
 						m = fm
 					}
+				}
+			}
+			if m.Title == nil {
+				if gp, gm, ok := withoutLeadGroup(filepath.Base(c.Path), releasename.Hints{Size: c.Size}, []mediafiles.TitleRef{ref}); ok {
+					p, m = gp, gm
 				}
 			}
 			s.Confidence = confidence(m.Conf)
@@ -518,6 +550,9 @@ func execute(steps []mediafiles.PlanStep, ops Ops, resumable map[string]time.Tim
 }
 
 func place(s mediafiles.PlanStep, ops Ops, resumeFrom time.Time) mediafiles.PlaceResult {
+	if s.Symlink {
+		return placeSymlink(s)
+	}
 	r := mediafiles.PlaceResult{SourceFile: s.SourceFile, PlacedBy: "none"}
 	sfi, err := os.Lstat(s.SourceFile)
 	if err != nil {

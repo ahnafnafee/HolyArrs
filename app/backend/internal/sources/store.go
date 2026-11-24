@@ -20,10 +20,20 @@ func sourcesNamed(tx *sql.Tx, name string, id int64) (int, error) {
 	return n, err
 }
 
-// deleteSource removes a Source row; its Releases and calls go with it.
-func deleteSource(tx *sql.Tx, id int64) error {
-	_, err := tx.Exec("DELETE FROM sources WHERE id = ?", id)
+// deleteSource removes a Source row; any Releases and calls left go with it.
+func deleteSource(ctx context.Context, tx *sql.Tx, id int64) error {
+	_, err := tx.ExecContext(ctx, "DELETE FROM sources WHERE id = ?", id)
 	return err
+}
+
+// deleteSourceRowsTx removes up to limit rows of a Source from table
+// (releases or source_calls) and returns how many went.
+func deleteSourceRowsTx(ctx context.Context, tx *sql.Tx, table string, id int64, limit int) (int64, error) {
+	res, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid IN (SELECT rowid FROM "+table+" WHERE source_id = ? LIMIT ?)", id, limit)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // pauseSourceTx puts a Source on a back-off pause. Only the health columns
@@ -112,6 +122,7 @@ func (f missingFilter) from() string {
 	return ` FROM slots s JOIN items i ON i.id = s.item_id JOIN versions v ON v.id = s.version_id
 		JOIN titles t ON t.id = i.title_id
 		WHERE s.state IN (` + ph + `) AND (? = '' OR t.kind = ?) AND (? = 0 OR t.id = ?) AND i.keep_up_to_date = 1 AND v.keep_up_to_date = 1 AND t.state = 'active' AND s.active_download_id IS NULL
+		AND NOT ` + mediafiles.LookOnlySQL + `
 		AND (t.kind = 'movie' OR (? AND t.kind = 'show' AND t.keep_up_to_date = 1 AND s.state != 'not_out_yet' AND i.dropped_at IS NULL
 			AND (s.file_id IS NOT NULL OR ` + mediafiles.ShowOtherFolderFileSQL + ` IS NULL)
 			AND (i.part_id IS NULL OR EXISTS (SELECT 1 FROM parts p WHERE p.id = i.part_id AND p.keep_up_to_date = 1 AND p.dropped_at IS NULL)))
