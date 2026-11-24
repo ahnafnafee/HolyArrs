@@ -275,6 +275,7 @@ GET /api/v1/settings/url-base auth=settings scope=read assurance=false part=core
 GET /api/v1/settings/watch-history auth=owner scope=admin assurance=false part=media
 GET /api/v1/shows/lookup auth=signed_in scope=read assurance=false part=shows
 GET /api/v1/sources auth=manage_library scope=read assurance=false part=core
+GET /api/v1/sources/nsfw-search/{token}/thumbnail auth=settings scope=admin assurance=false part=core
 GET /api/v1/sources/sites auth=manage_library scope=read assurance=false part=core
 GET /api/v1/sources/{id}/stats auth=manage_library scope=read assurance=false part=core
 GET /api/v1/subtitle-sites auth=manage_library scope=read assurance=false part=subtitles
@@ -584,6 +585,8 @@ POST /api/v1/settings/trakt-signin/check auth=owner scope=admin assurance=false 
 POST /api/v1/shows auth=manage_library scope=write assurance=false part=shows
 POST /api/v1/sources auth=settings scope=write assurance=false part=core
 POST /api/v1/sources/check auth=settings scope=write assurance=false part=core
+POST /api/v1/sources/nsfw-search auth=settings scope=write assurance=false part=core
+POST /api/v1/sources/nsfw-search/{token}/download auth=settings scope=write assurance=false part=core
 POST /api/v1/sources/{id}/pause auth=settings scope=write assurance=false part=core
 POST /api/v1/sources/{id}/resume auth=settings scope=write assurance=false part=core
 POST /api/v1/sources/{id}/test auth=settings scope=write assurance=false part=core

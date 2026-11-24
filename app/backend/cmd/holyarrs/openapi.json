@@ -30737,8 +30737,18 @@
     },
     "/api/v1/sources/nsfw-search": {
       "post": {
-        "responses": {},
-        "summary": "",
+        "responses": {
+          "200": {
+            "description": "The release previews and source statuses."
+          },
+          "400": {
+            "description": "The query is empty or invalid."
+          },
+          "403": {
+            "description": "The account cannot use private release search."
+          }
+        },
+        "summary": "Search configured private release sources",
         "x-holyarrs-part": "core",
         "x-holyarrs-permission": "settings",
         "x-holyarrs-scope": "write"
@@ -30756,8 +30766,24 @@
             }
           }
         ],
-        "responses": {},
-        "summary": "",
+        "responses": {
+          "200": {
+            "description": "The status of the submission."
+          },
+          "403": {
+            "description": "The account cannot use private release search."
+          },
+          "404": {
+            "description": "The release preview expired or does not belong to this account."
+          },
+          "409": {
+            "description": "The source no longer has a compatible downloader."
+          },
+          "502": {
+            "description": "The downloader could not accept the release."
+          }
+        },
+        "summary": "Send a selected private release to its downloader",
         "x-holyarrs-part": "core",
         "x-holyarrs-permission": "settings",
         "x-holyarrs-scope": "write"
@@ -30775,8 +30801,18 @@
             }
           }
         ],
-        "responses": {},
-        "summary": "",
+        "responses": {
+          "200": {
+            "description": "The artwork in its original image format."
+          },
+          "403": {
+            "description": "The account cannot use private release search."
+          },
+          "404": {
+            "description": "The preview or its artwork is unavailable."
+          }
+        },
+        "summary": "Get artwork for a private release preview",
         "x-holyarrs-part": "core",
         "x-holyarrs-permission": "settings",
         "x-holyarrs-scope": "admin"
