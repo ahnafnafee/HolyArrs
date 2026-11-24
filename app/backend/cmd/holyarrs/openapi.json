@@ -30735,6 +30735,53 @@
         "x-holyarrs-scope": "write"
       }
     },
+    "/api/v1/sources/nsfw-search": {
+      "post": {
+        "responses": {},
+        "summary": "",
+        "x-holyarrs-part": "core",
+        "x-holyarrs-permission": "settings",
+        "x-holyarrs-scope": "write"
+      }
+    },
+    "/api/v1/sources/nsfw-search/{token}/download": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "",
+        "x-holyarrs-part": "core",
+        "x-holyarrs-permission": "settings",
+        "x-holyarrs-scope": "write"
+      }
+    },
+    "/api/v1/sources/nsfw-search/{token}/thumbnail": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {},
+        "summary": "",
+        "x-holyarrs-part": "core",
+        "x-holyarrs-permission": "settings",
+        "x-holyarrs-scope": "admin"
+      }
+    },
     "/api/v1/sources/sites": {
       "get": {
         "description": "The sites HolyArrs can read directly as a Source, with no Prowlarr or Jackett: their id, name, address, media types, whether they need your own key, and their polite limits.",
