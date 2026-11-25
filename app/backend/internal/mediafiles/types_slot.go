@@ -58,7 +58,7 @@ var slotMoves = map[SlotState][]SlotState{
 	// searches again, chooses a Release by hand or stops looking with a
 	// copy in place (stage 4.1.2).
 	SlotNeedsADecision: {SlotImporting, SlotWanted, SlotSearching, SlotChosen, SlotBetterWanted},
-	SlotRejected:       {SlotSearching},
+	SlotRejected:       {SlotSearching, SlotWanted, SlotBetterWanted},
 	// in_library -> searching: a Release chosen by hand replaces a File
 	// that is already good enough.
 	SlotInLibrary: {SlotBetterWanted, SlotWanted, SlotRemoved, SlotSearching},

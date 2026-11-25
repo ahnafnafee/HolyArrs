@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+
+	"github.com/HolyArrs/holyarrs/app/backend/internal/core/database"
 )
 
 // waitingSlotsSQL picks the Slots in the JSON list ?2 (the download's
@@ -51,7 +53,7 @@ func ImportSettled(ctx context.Context, db *sql.DB, downloadID int64, slotIDs []
 
 // ImportRunning reports whether HolyArrs is placing the download's files
 // right now: an import approved or placing, or a Slot of it importing.
-func ImportRunning(ctx context.Context, db *sql.DB, downloadID int64) (bool, error) {
+func ImportRunning(ctx context.Context, db database.Querier, downloadID int64) (bool, error) {
 	var ok bool
 	err := db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM imports WHERE download_id = ?1 AND state IN ('approved', 'placing'))
 		OR EXISTS (SELECT 1 FROM slots WHERE active_download_id = ?1 AND state = 'importing')`, downloadID).Scan(&ok)

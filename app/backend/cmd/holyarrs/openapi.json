@@ -16816,7 +16816,7 @@
     },
     "/api/v1/downloads/{id}/remove": {
       "post": {
-        "description": "Takes a Download away by hand, an active one or a finished (seeding) one on a Downloader HolyArrs may change: removed from the Downloader (with its files when delete_files), the Release turned down when turn_down, and the movie searched again when turn_down and search_again; otherwise it goes back to wanted. Missing choices come from Settings > Downloaders.",
+        "description": "Takes a Download away by hand, an active one or a finished (seeding) one on a Downloader HolyArrs may change: removed from the Downloader (with its files when delete_files), the Release turned down when turn_down, and the movie searched again when turn_down and search_again; otherwise it goes back to wanted. Missing choices come from Settings > Downloaders. With clear_problem, dismiss a failed or review record in HolyArrs and keep all files. search_again applies to the affected Slots still tied to this download. It defaults to false in this mode, which turns off automatic searches for them.",
         "operationId": "removeDownload",
         "parameters": [
           {
@@ -16833,6 +16833,9 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "clear_problem": {
+                    "type": "boolean"
+                  },
                   "delete_files": {
                     "type": "boolean"
                   },

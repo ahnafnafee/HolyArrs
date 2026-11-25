@@ -4,6 +4,7 @@
 	// Selection bars for ticked downloads: a toolbar above the list on wide screens, a floating sheet on phones.
 	import Icon from '#lib/ui/Icon.svelte';
 	import type { BulkAction, SteerMode } from './manage.ts';
+	import { canClearProblem } from './status-tabs.ts';
 	import { retryable } from './usenet.ts';
 	import type { DownloadRow } from '../core/types.ts';
 
@@ -22,6 +23,7 @@
 		onsteer,
 		onretry,
 		onremovemany,
+		onclearproblems,
 		onall,
 		onclear
 	}: {
@@ -39,10 +41,12 @@
 		onsteer?: (rows: DownloadRow[], mode: SteerMode) => void;
 		onretry?: (rows: DownloadRow[]) => void;
 		onremovemany?: (rows: DownloadRow[], withFiles?: boolean) => void;
+		onclearproblems?: (rows: DownloadRow[]) => void;
 		onall: () => void;
 		onclear: () => void;
 	} = $props();
 
+	const problems = $derived(pickedRows.filter(canClearProblem));
 	const PHONE_BULK = $derived<{ action: BulkAction; label: string; icon: 'play' | 'pause' | 'refresh' }[]>([{ action: 'start', label: t('downloads.act.start'), icon: 'play' }, { action: 'pause', label: t('downloads.act.pause'), icon: 'pause' }, { action: 'recheck', label: t('downloads.act.checkAgain'), icon: 'refresh' }]);
 	const BULK = $derived<{ action: BulkAction; label: string }[]>([
 		{ action: 'recheck', label: t('downloads.act.checkAgain') }, { action: 'reannounce', label: t('downloads.act.askTrackers') }, { action: 'top', label: t('downloads.act.top') },
@@ -55,6 +59,7 @@
 		{#if bulkRows.length}{#each BULK as b (b.action)}<button type="button" class="xbn" disabled={batchBusy} onclick={() => onbulk?.(bulkRows, b.action)} data-testid="dl-bulk-{b.action}">{b.label}</button>{/each}{/if}
 		{#if pickedRows.some(steerable)}{#each steer as m (m.mode)}<button type="button" class="xbn" onclick={() => onsteer?.(pickedRows.filter(steerable), m.mode)} data-testid="dl-bulk-steer-{m.mode}">{m.short}</button>{/each}{/if}
 		{#if pickedRows.some((r) => retryable(r) && mayEdit(r))}<button type="button" class="xbn" disabled={batchBusy} onclick={() => onretry?.(pickedRows.filter((r) => retryable(r) && mayEdit(r)))} data-testid="dl-bulk-retry">{t('downloads.act.again')}</button>{/if}
+		{#if onclearproblems && problems.length}<button type="button" class="xbn" disabled={batchBusy} onclick={() => onclearproblems?.(problems)} data-testid="dl-clear-problems">{t('downloads.page.clearProblems')}</button>{/if}
 		<button type="button" class="xbn" onclick={onall} data-testid="dl-bulk-all">{t('downloads.sel.all')}</button>
 		<button type="button" class="xbn" onclick={onclear} data-testid="dl-bulk-clear">{t('downloads.sel.clear')}</button>
 	</div>
@@ -62,6 +67,7 @@
 			<div class="pst"><span class="sn" aria-live="polite"><Words key="downloads.sel.selectedCount" vars={{ n: pickedRows.length }} /></span><button type="button" class="plk" onclick={onall} data-testid="dl-psel-all">{t('downloads.sel.all')}</button><button type="button" class="plk" onclick={onclear} data-testid="dl-psel-cancel">{t('downloads.sel.cancel')}</button></div>
 			<div class="psa">
 				{#each PHONE_BULK.filter((b) => b.action !== 'recheck' || bulkRows.length) as b (b.action)}<button type="button" class="pa" disabled={batchBusy || (b.action === 'start' ? !startT.rows.length : b.action === 'pause' ? !pauseT.rows.length : false)} onclick={() => (b.action === 'start' ? runOn(startT, 'resume', 'start') : b.action === 'pause' ? runOn(pauseT, 'pause', 'pause') : onbulk?.(bulkRows, b.action))} data-testid="dl-psel-{b.action}"><Icon name={b.icon} size={20} /><span>{b.label}</span></button>{/each}
+				{#if onclearproblems && problems.length}<button type="button" class="pa" disabled={batchBusy} onclick={() => onclearproblems?.(problems)} data-testid="dl-psel-clear-problems"><Icon name="check" size={20} /><span>{t('downloads.page.clearProblems')}</span></button>{/if}
 				<button type="button" class="pa bad" onclick={() => onremovemany?.(pickedRows)} data-testid="dl-psel-remove"><Icon name="trash" size={20} /><span>{t('downloads.act.remove')}</span></button>
 			</div>
 		</div>

@@ -31,11 +31,12 @@ func (a *Web) removeDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		DeleteFiles *bool `json:"delete_files"`
-		TurnDown    *bool `json:"turn_down"`
-		SearchAgain *bool `json:"search_again"`
+		DeleteFiles  *bool `json:"delete_files"`
+		TurnDown     *bool `json:"turn_down"`
+		ClearProblem bool  `json:"clear_problem"`
+		SearchAgain  *bool `json:"search_again"`
 	}
-	if r.ContentLength != 0 && !webserver.Decode(w, r, &in, `body is {"delete_files": bool, "turn_down": bool, "search_again": bool}, each optional (defaults in Settings > Downloaders)`) {
+	if r.ContentLength != 0 && !webserver.Decode(w, r, &in, `body is {"delete_files": bool, "turn_down": bool, "search_again": bool, "clear_problem": bool}, each optional (defaults in Settings > Downloaders)`) {
 		return
 	}
 	c := RemoveChoice{DeleteFiles: st.RemoveDeleteFiles, TurnDown: st.RemoveTurnDown, SearchAgain: st.RemoveSearchAgain}
@@ -52,18 +53,23 @@ func (a *Web) removeDownload(w http.ResponseWriter, r *http.Request) {
 	if p, ok := webserver.From(r.Context()); ok {
 		who = p.Name
 	}
-	note, err := a.Manager().RemoveSaid(r.Context(), id, c, actor(r), who)
+	var note string
+	if in.ClearProblem {
+		err = a.Manager().ClearProblem(r.Context(), id, in.SearchAgain != nil && *in.SearchAgain, actor(r))
+	} else {
+		note, err = a.Manager().RemoveSaid(r.Context(), id, c, actor(r), who)
+	}
 	switch {
 	case errors.Is(err, database.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		webserver.Fail(w, http.StatusNotFound, "no such download")
-	case errors.Is(err, ErrNotActive), errors.Is(err, ErrImporting), errors.Is(err, ErrDownloaderReadOnly):
+	case errors.Is(err, ErrNotActive), errors.Is(err, errNotProblem), errors.Is(err, ErrImporting), errors.Is(err, ErrDownloaderReadOnly):
 		webserver.Fail(w, http.StatusConflict, err.Error())
 	case err != nil:
 		webserver.Internal(w, "api", err)
 	default:
 		var d domain.Download
 		_ = database.Get(r.Context(), a.Store.Read(), "downloads", id, &d)
-		if d.ExternalID != "" {
+		if !in.ClearProblem && d.ExternalID != "" {
 			a.forgetTorrents(r.Context(), d.DownloaderID, []string{d.ExternalID})
 		}
 		v := DownloadViewOf(d)
@@ -374,11 +380,7 @@ func (a *Web) decide(w http.ResponseWriter, r *http.Request) {
 				}
 				// A movie stops for its Version; an episode for itself, so
 				// the rest of the show keeps going.
-				q := "UPDATE versions SET keep_up_to_date = 0, updated_at = ? WHERE id = (SELECT version_id FROM slots WHERE id = ?)"
-				if t.Kind == "show" || t.Kind == "artist" {
-					q = "UPDATE items SET keep_up_to_date = 0, updated_at = ? WHERE id = (SELECT item_id FROM slots WHERE id = ?)"
-				}
-				if _, err := tx.Exec(q, database.FormatTime(time.Now()), t.SlotID); err != nil {
+				if err := stopLookingTx(tx, t.SlotID, t.Kind); err != nil {
 					return err
 				}
 				st := mediafiles.SlotWanted
@@ -422,6 +424,25 @@ func (a *Web) decide(w http.ResponseWriter, r *http.Request) {
 	default:
 		webserver.Fail(w, http.StatusBadRequest, `action is "search", "turn_down", "stop" or "import"`)
 	}
+}
+
+// stopLookingTx stops a movie Version or an individual episode or track.
+func stopLookingTx(tx *sql.Tx, slotID int64, kind string) error {
+	query := "UPDATE versions SET keep_up_to_date = 0, updated_at = ? WHERE id = (SELECT version_id FROM slots WHERE id = ?)"
+	if kind == "show" || kind == "artist" {
+		query = "UPDATE items SET keep_up_to_date = 0, updated_at = ? WHERE id = (SELECT item_id FROM slots WHERE id = ?)"
+	}
+	now := database.FormatTime(time.Now())
+	if _, err := tx.Exec(query, now, slotID); err != nil {
+		return err
+	}
+	// Nightly and retry jobs may already be queued. Leave manual searches
+	// and searches shared by several episodes or tracks alone.
+	_, err := tx.Exec(`UPDATE jobs SET state = 'cancelled', ended_at = ?, updated_at = ?
+		WHERE kind = ? AND state = 'queued' AND json_extract(subject, '$.type') = 'slot'
+		AND json_extract(subject, '$.id') = ? AND COALESCE(json_extract(params, '$.by_hand'), 0) = 0
+		AND COALESCE(json_extract(params, '$.choose'), 1) != 0`, now, now, jobs.KindSearchSlot, slotID)
+	return err
 }
 
 // importer places files the way the import job does, for Review's Import this file.

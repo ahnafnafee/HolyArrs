@@ -3,6 +3,7 @@
 	import { t } from '#lib/core/i18n/i18n.svelte.ts';
 	import { libraryBrief } from '#lib/mediafiles/index.ts';
 	import { decisionName, manyWords, removeBody, removeFilesWords, removeDeletesFiles, doneLine, doneInLibrary, finishedOwn, removeStart, rowName, rowPath, type DownloaderSettings, type DownloaderView, type RemoveChoice, applyPatch, fromAnswer, isDl, mergeClient, wentStale, type Sync, dlPush, decisions, refreshDecisions, DlSections, ConfirmMatch, byDownload, AddTorrents, SteerSheet, BULK_DONE, byClient, type BulkAction } from '#lib/downloads/index.ts';
+	import { canClearProblem } from '#lib/downloads/status-tabs.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { to } from '#lib/core/paths.ts';
@@ -351,6 +352,53 @@
 		}
 	}
 
+	let clearOpen = $state(false);
+	let problemTargets = $state<DownloadRow[]>([]);
+	let clearSearch = $state(false);
+	let clearBusy = $state(false);
+	let clearError = $state('');
+	function askClearProblems(rows: DownloadRow[]) {
+		if (watch || clearBusy) return;
+		problemTargets = rows.filter(canClearProblem);
+		if (!problemTargets.length) return;
+		clearSearch = false;
+		clearError = '';
+		clearOpen = true;
+	}
+	async function clearProblems(e: SubmitEvent) {
+		e.preventDefault();
+		if (watch || clearBusy || !problemTargets.length) return;
+		clearBusy = true;
+		clearError = '';
+		const search = clearSearch;
+		const failures: DownloadRow[] = [];
+		const errors: string[] = [];
+		try {
+			for (const row of problemTargets) {
+				try {
+					if (row.id < 0) {
+						await api.post(`/needs-decision/${-row.id}/decide`, { action: search ? 'search' : 'stop' });
+					} else {
+						await api.post(`/downloads/${row.id}/remove`, { clear_problem: true, search_again: search });
+					}
+				} catch (error) {
+					failures.push(row);
+					errors.push(`${who(row)}: ${message(error)}`);
+				}
+			}
+			if (failures.length) {
+				problemTargets = failures;
+				clearError = errors.join(' · ');
+			} else {
+				clearOpen = false;
+				toasts.push(t('downloads.page.problemsCleared'), 'ok');
+			}
+			await Promise.all([load(), refreshDecisions()]);
+		} finally {
+			clearBusy = false;
+		}
+	}
+
 	// The Remove dialog: one download, or a selection. Delete files is off unless asked for (Shift+Delete), except a HolyArrs download follows the remove defaults in Settings.
 	let removeOpen = $state(false);
 	let targets = $state<DownloadRow[]>([]);
@@ -602,11 +650,26 @@
 	{#if error}<div class="pad"><LoadError hasData message={t('downloads.page.couldNotLoad')} onretry={load} /></div>{/if}
 	{#if notes.length}<ul class="notes" aria-live="polite" data-testid="dl-notes">{#each notes as n (n)}<li>{n}</li>{/each}</ul>{/if}
 	{#if !watch && loaded}<div class="matchpad"><ConfirmMatch refresh={reads} onchange={() => void load()} /></div>{/if}
-	<DlSections loading={!loaded} changeOutside={session.can('settings')} rows={allRows} {importOf} titles={titleById} {titlesReady} {busy} {torrent} {decisionsOf} onsearch={holdSearch} bind:openId onfail={markFailed} onremove={askRemove} ondone={() => void load()} onact={act} onall={(p) => batch(() => all(p))} onlimit={openLimit} onadd={torrentClients.length ? () => (addOpen = true) : undefined} onbulk={(l, a) => batch(() => bulk(l, a))} onsteer={steer} onremovemany={askRemoveMany} onretry={(l) => batch(() => retryMany(l))} {batchBusy} {watch} {upTotal} {notes} outside={{ rest: outsideRest, canMore: moreOutside && outsideLimit < outsideMax, capMax: outsideMax, onmore: showMore }} />
+	<DlSections loading={!loaded} changeOutside={session.can('settings')} rows={allRows} {importOf} titles={titleById} {titlesReady} {busy} {torrent} {decisionsOf} onsearch={holdSearch} bind:openId onfail={markFailed} onremove={askRemove} ondone={() => void load()} onact={act} onall={(p) => batch(() => all(p))} onlimit={openLimit} onadd={torrentClients.length ? () => (addOpen = true) : undefined} onbulk={(l, a) => batch(() => bulk(l, a))} onsteer={steer} onremovemany={askRemoveMany} onclearproblems={watch ? undefined : askClearProblems} onretry={(l) => batch(() => retryMany(l))} {batchBusy} {watch} {upTotal} {notes} outside={{ rest: outsideRest, canMore: moreOutside && outsideLimit < outsideMax, capMax: outsideMax, onmore: showMore }} />
 {/if}
 
 <SteerSheet bind:open={steerOpen} mode={steerMode} rows={steerRows} ondone={() => void load()} />
 <AddTorrents bind:open={addOpen} clients={torrentClients} ondone={() => void load()} />
+
+<Sheet bind:open={clearOpen} title={t('downloads.page.clearProblems')} size="sm">
+	<form id="clear-problems-form" onsubmit={clearProblems}>
+		<p>{t('downloads.page.clearProblemsHint', { count: problemTargets.length })}</p>
+		<label class="checkline">
+			<input type="checkbox" bind:checked={clearSearch} disabled={clearBusy} data-testid="dl-clear-search-again" />
+			<span><b>{t('downloads.page.searchAgain')}</b><br /><span class="hint">{t(clearSearch ? 'downloads.page.clearSearchOn' : 'downloads.page.clearSearchOff')}</span></span>
+		</label>
+		{#if clearError}<p class="form-error" role="alert">{clearError}</p>{/if}
+	</form>
+	{#snippet footer()}
+		<Button variant="plain" disabled={clearBusy} onclick={() => (clearOpen = false)}>{t('downloads.sel.cancel')}</Button>
+		<Button variant="primary" type="submit" form="clear-problems-form" busy={clearBusy} disabled={clearBusy || !problemTargets.length} data-testid="dl-clear-problems-confirm">{t('downloads.page.clearProblems')}</Button>
+	{/snippet}
+</Sheet>
 
 <Sheet bind:open={removeOpen} title={targets.length > 1 ? t('downloads.page.removeN', { count: targets.length }) : t('downloads.page.removeOne')} size="sm">
 	{#if targets.length}

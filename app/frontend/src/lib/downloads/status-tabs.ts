@@ -77,6 +77,12 @@ export function stageOf(r: RowBits): Stage {
 	return 'done';
 }
 
+/** A HolyArrs problem that can be cleared from Downloads. */
+export function canClearProblem(r: DownloadRow): boolean {
+	const stage = stageOf(r);
+	return !r.client_item && !r.active && (stage === 'failed' || stage === 'decide');
+}
+
 /** The default tab: every row, finished and seeding ones included. */
 export const ALL = 'active';
 

@@ -64,6 +64,7 @@
 		onlimit,
 		onadd,
 		onremovemany,
+		onclearproblems,
 		onretry,
 		onbulk,
 		onsteer,
@@ -95,6 +96,7 @@
 		onlimit?: () => void;
 		onadd?: () => void;
 		onremovemany?: (rows: DownloadRow[], withFiles?: boolean) => void;
+		onclearproblems?: (rows: DownloadRow[]) => void;
 		onretry?: (rows: DownloadRow[]) => void;
 		onbulk?: (rows: DownloadRow[], action: BulkAction) => void;
 		onsteer?: (rows: DownloadRow[], mode: SteerMode) => void;
@@ -587,7 +589,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="listbox" bind:this={cols.listEl} onscroll={nearEnd} data-testid="dl-listbox" use:overlayScroll={{ header: ".chead" }}>
 {#if (pickedRows.length || selecting) && !watch}
-	<DlSelBars {pickedRows} {bulkRows} steer={STEER} {startT} {pauseT} {batchBusy} {steerable} {mayEdit} {runOn} {onbulk} {onsteer} {onretry} {onremovemany} onall={() => (picked = new Set(list.map((r) => r.id)))} onclear={clearPicked} />
+	<DlSelBars {pickedRows} {bulkRows} steer={STEER} {startT} {pauseT} {batchBusy} {steerable} {mayEdit} {runOn} {onbulk} {onsteer} {onretry} {onremovemany} {onclearproblems} onall={() => (picked = new Set(list.map((r) => r.id)))} onclear={clearPicked} />
 {/if}
 {#if list.length && !loading}
 	<div class="tw" onscroll={cols.sync} data-testid="dl-tablebox"><div class="tin">
