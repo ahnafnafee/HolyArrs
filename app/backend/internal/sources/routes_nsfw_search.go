@@ -13,6 +13,7 @@ import (
 
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/database"
 	domain "github.com/HolyArrs/holyarrs/app/backend/internal/core/model"
+	"github.com/HolyArrs/holyarrs/app/backend/internal/core/parts"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/webserver"
 )
 
@@ -54,6 +55,10 @@ type nsfwSearchAnswer struct {
 // nsfwAccess keeps search results and related requests behind the same checks.
 func nsfwAccess(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Cache-Control", "no-store")
+	if !parts.PrivateReleaseSearchEnabled() {
+		webserver.Fail(w, http.StatusNotFound, "no such route")
+		return false
+	}
 	if !webserver.RequireStrong(w, r) {
 		return false
 	}

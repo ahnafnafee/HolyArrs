@@ -21,11 +21,12 @@
 </script>
 
 <script lang="ts">
+	import { privateReleaseSearchOn } from '#lib/mediafiles/parts.svelte.ts';
 	import { session } from '#lib/core/session.svelte.ts';
 	import SegmentedControl from '#lib/ui/SegmentedControl.svelte';
 
 	let { value, onchange }: { value: Scope; onchange: (scope: Scope) => void } = $props();
-	const allowed = $derived(session.can('settings') && !session.kid);
+	const allowed = $derived(privateReleaseSearchOn() && session.can('settings') && !session.kid);
 	const standard = $derived(standardSearchScopes());
 	const options = $derived<ScopeOption[]>(allowed
 		? [...standard, { value: 'nsfw', label: t('discover.nsfw.tab'), icon: 'shield' }]

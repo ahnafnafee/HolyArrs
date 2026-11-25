@@ -4123,6 +4123,10 @@
             },
             "type": "array"
           },
+          "private_release_search": {
+            "description": "Private release search is enabled for this installation.",
+            "type": "boolean"
+          },
           "safe_mode": {
             "type": "boolean"
           },
@@ -30746,6 +30750,9 @@
           },
           "403": {
             "description": "The account cannot use private release search."
+          },
+          "404": {
+            "description": "Private release search is disabled."
           }
         },
         "summary": "Search configured private release sources",
@@ -30774,7 +30781,7 @@
             "description": "The account cannot use private release search."
           },
           "404": {
-            "description": "The release preview expired or does not belong to this account."
+            "description": "Private release search is disabled or the preview is unavailable for this account."
           },
           "409": {
             "description": "The source no longer has a compatible downloader."
@@ -30809,7 +30816,7 @@
             "description": "The account cannot use private release search."
           },
           "404": {
-            "description": "The preview or its artwork is unavailable."
+            "description": "Private release search is disabled or the preview or its artwork is unavailable."
           }
         },
         "summary": "Get artwork for a private release preview",

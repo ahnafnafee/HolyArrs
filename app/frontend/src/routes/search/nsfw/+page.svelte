@@ -13,7 +13,7 @@
 	import { focusOnOpen, nsfwScope, searchField } from '#lib/core/search-field.svelte.ts';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { partsNow, privateReleaseSearchOn } from '#lib/mediafiles/parts.svelte.ts';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 	type Release = {
@@ -62,7 +62,15 @@
 		void goto(scopeAddress(new URL(to('/search'), page.url.href), scope, searchField.term));
 	}
 
-	onMount(() => {
+	const partsLoaded = $derived(partsNow.answer !== null);
+	const enabled = $derived(privateReleaseSearchOn());
+
+	$effect(() => {
+		if (!partsLoaded) return;
+		if (!enabled) {
+			void goto(to('/search'), { replaceState: true });
+			return;
+		}
 		nsfwScope.submit = search;
 		nsfwScope.exit = () => selectScope('all');
 		focusOnOpen();
@@ -75,7 +83,7 @@
 
 	async function search() {
 		const words = nsfwScope.term.trim();
-		if (!words || busy || !session.can('settings') || session.kid) return;
+		if (!enabled || !words || busy || !session.can('settings') || session.kid) return;
 		busy = true;
 		showDetails = false;
 		missingArt.clear();
@@ -92,7 +100,8 @@
 	}
 </script>
 
-<svelte:head><title>{t('discover.nsfw.title')} Ã‚Â· HolyArrs</title></svelte:head>
+<svelte:head><title>{enabled ? t('discover.nsfw.title') : t('discover.search.search')} Ã‚Â· HolyArrs</title></svelte:head>
+{#if enabled}
 
 <section class="release-search" data-testid="nsfw-search">
 	<h1 class="sr-only">{t('discover.nsfw.title')}</h1>
@@ -141,6 +150,7 @@
 		<div><Button href={to('/search')} variant="plain">{t('discover.nsfw.back')}</Button></div>
 	{/if}
 </section>
+{/if}
 
 {#snippet artwork(release: Release, preview: boolean)}
 	{@const url = to(`/api/v1/sources/nsfw-search/${release.id}/thumbnail`)}
@@ -152,7 +162,7 @@
 	</span>
 {/snippet}
 
-{#if selected}
+{#if enabled && selected}
 	{@const release = selected}
 	{@const state = queued.get(release.id)}
 	<Sheet bind:open={showDetails} title={release.name}>

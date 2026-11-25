@@ -13,6 +13,7 @@ import (
 )
 
 func TestNSFWSearchUsesTaggedSourcesAndOmitsLinks(t *testing.T) {
+	t.Setenv("HOLYARRS_PRIVATE_RELEASE_SEARCH", "1")
 	regular := &liveFeed{}
 	regular.set(duneFeed)
 	f := seed(t, regular.url(t))
@@ -78,12 +79,27 @@ func TestNSFWSearchUsesTaggedSourcesAndOmitsLinks(t *testing.T) {
 }
 
 func TestNSFWSearchRefusesRatingLimitedAccount(t *testing.T) {
+	t.Setenv("HOLYARRS_PRIVATE_RELEASE_SEARCH", "1")
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/sources/nsfw-search", strings.NewReader(`{"query":"Dune"}`))
 	req = req.WithContext(webserver.ContextWith(req.Context(), webserver.Caller{Via: "session", MaxRating: "PG"}))
 	reply := httptest.NewRecorder()
 	(&Handlers{}).searchNSFW(reply, req)
 	if reply.Code != http.StatusForbidden {
 		t.Fatalf("got HTTP %d, want 403", reply.Code)
+	}
+}
+
+func TestPrivateReleaseRoutesDisabledByDefault(t *testing.T) {
+	t.Setenv("HOLYARRS_PRIVATE_RELEASE_SEARCH", "")
+	h := &Handlers{}
+	for _, f := range []http.HandlerFunc{h.searchNSFW, h.nsfwThumbnail, h.downloadNSFW} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r = r.WithContext(webserver.ContextWith(r.Context(), webserver.Caller{UserID: 1, Via: "session"}))
+		f(w, r)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("disabled route returned HTTP %d, want 404", w.Code)
+		}
 	}
 }
 

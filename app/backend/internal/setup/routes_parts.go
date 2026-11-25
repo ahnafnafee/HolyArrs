@@ -78,7 +78,7 @@ func (h *PartHandlers) listParts(w http.ResponseWriter, r *http.Request) {
 		}
 		stages = h.Parts.Stages()
 	}
-	webserver.WriteJSON(w, http.StatusOK, map[string]any{"parts": out, "screens": parts.Screens(), "safe_mode": h.SafeMode, "safe_screens": safeScreens, "stages": stages})
+	webserver.WriteJSON(w, http.StatusOK, map[string]any{"parts": out, "screens": parts.Screens(), "safe_mode": h.SafeMode, "safe_screens": safeScreens, "stages": stages, "private_release_search": !h.SafeMode && parts.PrivateReleaseSearchEnabled()})
 }
 
 func (h *PartHandlers) partFrom(w http.ResponseWriter, r *http.Request) (parts.Part, bool) {

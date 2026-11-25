@@ -8,6 +8,7 @@
 	import { appPath, to } from '../core/paths.ts';
 	import { dlScope, nsfwScope, pluginScope, registerField, rememberReturn, searchField, searchHooks } from '../core/search-field.svelte.ts';
 	import { api } from '../core/api.ts';
+	import { privateReleaseSearchOn } from '#lib/mediafiles/parts.svelte.ts';
 	import { inSettings, settingsFind } from '../core/settings-find.svelte.ts';
 
 	// The one search field in the top bar. Typing or Enter opens the Search page with the words; focusing or clicking an empty field opens it on Browse. Escape clears the words; a second Escape closes Search.
@@ -24,7 +25,7 @@
 	const scope = $derived(plScoped ? pluginScope : dlScope);
 	// In Settings the field searches settings instead, with results on the Settings home.
 	const settings = $derived(inSettings(appPath(page.url.pathname)));
-	const nsfw = $derived(appPath(page.url.pathname) === '/search/nsfw');
+	const nsfw = $derived(privateReleaseSearchOn() && appPath(page.url.pathname) === '/search/nsfw');
 	const shown = $derived(nsfw ? nsfwScope.term : settings ? settingsFind.term : scoped ? scope.term : searchField.term);
 	$effect(() => {
 		if (!nsfw) return;

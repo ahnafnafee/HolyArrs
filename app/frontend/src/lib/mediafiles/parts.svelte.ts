@@ -17,6 +17,8 @@ export async function refreshParts(): Promise<void> {
 // Counts as on until the answer says otherwise, so the UI does not flicker.
 export const partOn = (name: string): boolean => !!partsNow.answer && find(name)?.on !== false;
 
+export const privateReleaseSearchOn = (): boolean => partsNow.answer?.private_release_search === true;
+
 export const partOff = (name: string): boolean => find(name)?.on === false;
 
 // Looks up one part in the current answer.

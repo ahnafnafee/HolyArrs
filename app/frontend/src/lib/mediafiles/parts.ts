@@ -17,6 +17,7 @@ export interface PartsAnswer {
 	// Route pattern to owning part, so a page can tell if its part is off.
 	screens: Record<string, string>;
 	safe_mode: boolean;
+	private_release_search?: boolean;
 	// Routes that stay open in safe mode so the user can fix things.
 	safe_screens?: string[];
 	stages?: string[];
