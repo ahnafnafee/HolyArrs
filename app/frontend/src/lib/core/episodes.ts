@@ -11,3 +11,14 @@ export function availableEpisodeSlot<T extends { state: string; file_id?: number
 	return slots.find((slot) => slot.other_folder && (slot.file_id || slot.file) &&
 		(slot.state === 'in_library' || slot.state === 'better_wanted')) ?? primary;
 }
+
+/** An episode label with its name for a second line: "S01E02 · Flood", or the label alone while the name is unknown. "TBA" names are left out. */
+export function episodeNamed(label: string, name?: string | null): string {
+	const n = name?.trim();
+	return n && n.toUpperCase() !== 'TBA' ? `${label} · ${n}` : label;
+}
+
+/** episodeNamed for a season and episode number ("E02" when the season is unknown). */
+export function episodeWords(season: number | undefined | null, episode: number, name?: string | null): string {
+	return episodeNamed(season == null ? `E${String(episode).padStart(2, '0')}` : episodeCode(season, episode), name);
+}

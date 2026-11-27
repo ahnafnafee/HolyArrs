@@ -1,7 +1,7 @@
 // Shapes of the API answers the frontend reads.
 
 export interface CopyFile {
-	ID: number; VersionID: number; RelativePath: string; Size: number; AddedAt: string; State?: string; Protected?: boolean; MediaInfo?: Record<string, unknown> | null; ReleaseName?: string | null; Quality?: Record<string, unknown> | null;
+	ID: number; VersionID: number; RelativePath: string; Size: number; AddedAt: string; State?: string; Origin?: string; Protected?: boolean; MediaInfo?: Record<string, unknown> | null; ReleaseName?: string | null; Quality?: Record<string, unknown> | null;
 }
 
 export interface SlotView {
@@ -135,6 +135,8 @@ export interface SeasonSummary {
 	missing: number;
 	not_out_yet: number;
 	better_wanted: number;
+	// Episodes whose own Keep up to date switch is on.
+	kept?: number;
 	downloading?: number;
 	failed?: number;
 	next_air_date?: string;
@@ -211,6 +213,8 @@ export interface VersionView {
 	library_folder_id: number;
 	folder_path: string;
 	keep_up_to_date: boolean;
+	/** The Version's Library folder is look-only: HolyArrs never changes or deletes its files. */
+	look_only?: boolean;
 }
 
 export interface Movie {

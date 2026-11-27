@@ -15,6 +15,8 @@ var RoutePerms = map[string]webserver.Perm{
 	"GET /api/v1/plugins":                               webserver.NeedOwner,
 	"POST /api/v1/plugin-hooks/artwork":                 webserver.NeedOwner, // a plugin token only; the handler refuses people
 	"POST /api/v1/plugin-hooks/notify":                  webserver.NeedOwner, // a plugin token only; the handler refuses people
+	"GET /api/v1/plugin-hooks/botcheck":                 webserver.NeedOwner, // a plugin token only; the handler refuses people
+	"POST /api/v1/plugin-hooks/botcheck":                webserver.NeedOwner, // a plugin token only; the handler refuses people
 	"GET /api/v1/plugin-hooks/metadata":                 webserver.NeedOwner, // a plugin token only; the handler refuses people
 	"POST /api/v1/plugin-hooks/metadata":                webserver.NeedOwner, // a plugin token only; the handler refuses people
 	"GET /api/v1/plugins/{id}/activity":                 webserver.NeedOwner,
@@ -24,6 +26,8 @@ var RoutePerms = map[string]webserver.Perm{
 	"GET /api/v1/plugin-page-files/{token}/{path...}":   webserver.NeedPublic, // a random short-lived token is the key
 	"GET /api/v1/plugin-stream/{token}":                 webserver.NeedSignedIn,
 	"POST /api/v1/plugin-hooks/link":                    webserver.NeedOwner, // a plugin token only; the handler refuses people
+	"GET /api/v1/plugin-hooks/links":                    webserver.NeedOwner, // a plugin token only; the handler refuses people
+	"DELETE /api/v1/plugin-hooks/links/{user}":          webserver.NeedOwner, // a plugin token only; the handler refuses people
 	"GET /api/v1/my/plugin-links":                       webserver.NeedSelf,
 	"POST /api/v1/my/plugin-links":                      webserver.NeedSelf,
 	"DELETE /api/v1/my/plugin-links/{plugin}":           webserver.NeedSelf,
@@ -658,6 +662,10 @@ var RoutePerms = map[string]webserver.Perm{
 	"POST /radarr/":   webserver.PermManageLibrary,
 	"PUT /radarr/":    webserver.PermManageLibrary,
 	"DELETE /radarr/": webserver.PermManageLibrary,
+	"GET /lidarr/":    webserver.PermManageLibrary,
+	"POST /lidarr/":   webserver.PermManageLibrary,
+	"PUT /lidarr/":    webserver.PermManageLibrary,
+	"DELETE /lidarr/": webserver.PermManageLibrary,
 	// Its settings: the switch, and one key per side.
 	"GET /api/v1/settings/old-app-api":                webserver.PermSettings,
 	"PUT /api/v1/settings/old-app-api":                webserver.PermSettings,
@@ -715,7 +723,7 @@ var ScopeNotes = map[string]string{
 	webserver.ScopeControl:    "The controls: part switches, stage pause, resume and restart, reconnecting one linked app, whole-app restart, restart in safe mode and shut down.",
 	webserver.ScopeAll:        "Read, write and admin together (every route but the controls). Every key made before scopes existed holds this one.",
 	webserver.ScopeMCP:        "An AI connection only: the AI tools route and nothing else. The tools act as the key's person, within their permissions.",
-	webserver.ScopeCompat:     "The arr API only (/sonarr/ and /radarr/, for Seerr and Overseerr). Only the keys made for it (POST /api/v1/settings/old-app-api/keys/{side}) hold this scope; an API key cannot be made with it.",
+	webserver.ScopeCompat:     "The arr API only (/sonarr/ and /radarr/, for Seerr and Overseerr, and /lidarr/ for Prowlarr). Only the keys made for it (POST /api/v1/settings/old-app-api/keys/{side}) hold this scope; an API key cannot be made with it.",
 }
 
 // Gate checks every signed-in request against RoutePerms. It must sit

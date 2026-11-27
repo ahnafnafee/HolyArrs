@@ -29,6 +29,7 @@ DELETE /api/v1/never-add/{id} auth=manage_library scope=write assurance=false pa
 DELETE /api/v1/outside-lists/{id} auth=settings scope=write assurance=false part=media
 DELETE /api/v1/own-traits/{id} auth=settings scope=write assurance=false part=media
 DELETE /api/v1/pick-rules/{id} auth=settings scope=write assurance=false part=media
+DELETE /api/v1/plugin-hooks/links/{user} auth=owner scope=admin assurance=false part=core
 DELETE /api/v1/plugins/{id} auth=owner scope=admin assurance=false part=core
 DELETE /api/v1/settings/old-app-api/keys/{side} auth=settings scope=admin assurance=true part=core
 DELETE /api/v1/settings/trakt-signin auth=owner scope=admin assurance=false part=core
@@ -47,6 +48,7 @@ DELETE /blocklist/{id} auth=unlisted scope=admin assurance=false part=-
 DELETE /customformat/{id} auth=unlisted scope=admin assurance=false part=-
 DELETE /delayprofile/{id} auth=unlisted scope=admin assurance=false part=-
 DELETE /indexer/{id} auth=unlisted scope=admin assurance=false part=-
+DELETE /lidarr/ auth=manage_library scope=compat assurance=false part=music
 DELETE /movie/editor auth=unlisted scope=admin assurance=false part=-
 DELETE /movie/{id} auth=unlisted scope=admin assurance=false part=-
 DELETE /notification/{id} auth=unlisted scope=admin assurance=false part=-
@@ -214,8 +216,10 @@ GET /api/v1/people/shelves/{id} auth=signed_in scope=read assurance=false part=m
 GET /api/v1/people/{id} auth=signed_in scope=read assurance=false part=movies
 GET /api/v1/pick-rules auth=manage_library scope=read assurance=false part=media
 GET /api/v1/pick-rules/{id} auth=manage_library scope=read assurance=false part=media
+GET /api/v1/plugin-hooks/botcheck auth=owner scope=admin assurance=false part=core
 GET /api/v1/plugin-hooks/downloader auth=owner scope=admin assurance=false part=core
 GET /api/v1/plugin-hooks/events auth=owner scope=admin assurance=false part=core
+GET /api/v1/plugin-hooks/links auth=owner scope=admin assurance=false part=core
 GET /api/v1/plugin-hooks/metadata auth=owner scope=admin assurance=false part=core
 GET /api/v1/plugin-hooks/pages auth=owner scope=admin assurance=false part=core
 GET /api/v1/plugin-hooks/releases auth=owner scope=admin assurance=false part=core
@@ -343,6 +347,7 @@ GET /indexer auth=unlisted scope=admin assurance=false part=-
 GET /indexer/schema auth=unlisted scope=admin assurance=false part=-
 GET /indexer/{id} auth=unlisted scope=admin assurance=false part=-
 GET /languageprofile auth=unlisted scope=admin assurance=false part=-
+GET /lidarr/ auth=manage_library scope=compat assurance=false part=music
 GET /live auth=signed_in scope=read assurance=false part=core
 GET /log auth=unlisted scope=admin assurance=false part=-
 GET /login auth=self scope=read assurance=false part=core
@@ -542,6 +547,7 @@ POST /api/v1/people/{id}/movies/review auth=signed_in scope=read assurance=false
 POST /api/v1/pick-rules auth=settings scope=write assurance=false part=media
 POST /api/v1/pick-rules/{id}/trash auth=settings scope=write assurance=false part=media
 POST /api/v1/plugin-hooks/artwork auth=owner scope=admin assurance=false part=core
+POST /api/v1/plugin-hooks/botcheck auth=owner scope=admin assurance=false part=core
 POST /api/v1/plugin-hooks/downloader auth=owner scope=admin assurance=false part=core
 POST /api/v1/plugin-hooks/link auth=owner scope=admin assurance=false part=core
 POST /api/v1/plugin-hooks/metadata auth=owner scope=admin assurance=false part=core
@@ -630,6 +636,7 @@ POST /customformat auth=unlisted scope=admin assurance=false part=-
 POST /delayprofile auth=unlisted scope=admin assurance=false part=-
 POST /indexer auth=unlisted scope=admin assurance=false part=-
 POST /indexer/test auth=unlisted scope=admin assurance=false part=-
+POST /lidarr/ auth=manage_library scope=compat assurance=false part=music
 POST /mcp auth=signed_in scope=mcp assurance=false part=core
 POST /movie auth=unlisted scope=admin assurance=false part=-
 POST /movie/import auth=unlisted scope=admin assurance=false part=-
@@ -737,6 +744,7 @@ PUT /delayprofile/{id} auth=unlisted scope=admin assurance=false part=-
 PUT /episode/monitor auth=unlisted scope=admin assurance=false part=-
 PUT /episode/{id} auth=unlisted scope=admin assurance=false part=-
 PUT /indexer/{id} auth=unlisted scope=admin assurance=false part=-
+PUT /lidarr/ auth=manage_library scope=compat assurance=false part=music
 PUT /movie auth=unlisted scope=admin assurance=false part=-
 PUT /movie/editor auth=unlisted scope=admin assurance=false part=-
 PUT /movie/{id} auth=unlisted scope=admin assurance=false part=-
