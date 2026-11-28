@@ -111,6 +111,7 @@ describe('searchQueued', () => {
 		expect(searchQueued({ job_ids: [] })).toBe(false);
 		expect(searchQueued({ job_ids: null })).toBe(false);
 		expect(searchQueued({ job_ids: [4] })).toBe(true);
+		expect(searchQueued({ job_ids: [], subtitle_searches: 2 })).toBe(true);
 		expect(searchQueued(undefined)).toBe(true);
 	});
 });

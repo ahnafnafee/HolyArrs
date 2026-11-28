@@ -15,6 +15,7 @@ import (
 
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/database"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/jobs"
+	"github.com/HolyArrs/holyarrs/app/backend/internal/subtitles"
 )
 
 const (
@@ -438,6 +439,13 @@ func (s *Searcher) HandleSearchMissing(ctx context.Context, r *jobs.Run) error {
 	filter := missingFilter{States: states, Only: only, TitleID: int64(titleID)}
 	shows := titleID > 0 || Setting(ctx, db, SettingMissingShows) != "false"
 	music := titleID > 0 || Setting(ctx, db, SettingMissingMusic) != "false"
+	if s.OnSubtitleSearch != nil && limit > 0 && only != "artist" {
+		subtitleKind := only
+		if subtitleKind == "" && !shows {
+			subtitleKind = "movie"
+		}
+		s.OnSubtitleSearch(ctx, subtitles.ReleaseSearchScope{TitleID: int64(titleID), Kind: subtitleKind, KeptOnly: true, DueOnly: true})
+	}
 
 	// Approved requests go first. A Title with an approved ask and something never searched gets the one-title search that approval starts, oldest approval first, whatever the cap. The same Job is used so the two never run twice.
 	// It is skipped while approval's own scan and search are still to run, and after a one-title search was queued since the approval. Then the Title rejoins the oldest-searched-first turn below. Without this, an ask approved behind a large never-searched Library would wait for months.

@@ -17,6 +17,7 @@ import (
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/jobs"
 	domain "github.com/HolyArrs/holyarrs/app/backend/internal/core/model"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/mediafiles"
+	"github.com/HolyArrs/holyarrs/app/backend/internal/subtitles"
 )
 
 // Searcher runs the search jobs.
@@ -24,7 +25,8 @@ type Searcher struct {
 	Store *database.Store
 	Live  Publisher
 	// OnChosen is told when a release is chosen for a Slot, to send it to a Downloader.
-	OnChosen func(ctx context.Context, slotID, releaseID int64)
+	OnChosen         func(ctx context.Context, slotID, releaseID int64)
+	OnSubtitleSearch func(context.Context, subtitles.ReleaseSearchScope) int
 	// SettleGone settles a Slot's download its Downloader no longer has, before a
 	// pick by hand is refused for it. Nil means never.
 	SettleGone func(ctx context.Context, slotID int64) bool
@@ -265,6 +267,9 @@ func (s *Searcher) Handle(ctx context.Context, r *jobs.Run) error {
 		return s.queueAlbumFor(ctx, r, c)
 	}
 	handSearch, _ := r.Job.Params["by_hand"].(bool)
+	if s.OnSubtitleSearch != nil {
+		s.OnSubtitleSearch(ctx, subtitles.ReleaseSearchScope{SlotID: slotID, DueOnly: !handSearch})
+	}
 	skipGate, _ := r.Job.Params["skip_gate"].(bool)
 	show := false
 	if v, ok := r.Job.Params["choose"].(bool); ok && !v {

@@ -1,6 +1,7 @@
 package shows
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	domain "github.com/HolyArrs/holyarrs/app/backend/internal/core/model"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/webserver"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/sources"
+	"github.com/HolyArrs/holyarrs/app/backend/internal/subtitles"
 )
 
 // Show search (stage 3.2): an episode, a season or the whole show, by hand.
@@ -25,7 +27,8 @@ type SearchHandlers struct {
 	// RetryImport, when set, goes first: an episode whose download (a season
 	// pack, say) is on disk but failed to import is imported again, and its
 	// season is not searched episode by episode.
-	RetryImport sources.RetryImport
+	RetryImport      sources.RetryImport
+	OnSubtitleSearch func(context.Context, subtitles.ReleaseSearchScope) int
 }
 
 // Search queues the searches a person asked for on a show page: one
@@ -103,6 +106,7 @@ func (h *SearchHandlers) Search(w http.ResponseWriter, r *http.Request, t mediaf
 		webserver.Internal(w, "shows", err)
 		return
 	}
+	subtitleSearches := 0
 	switch {
 	case in.SlotID != nil:
 		var sl mediafiles.Slot
@@ -168,8 +172,21 @@ func (h *SearchHandlers) Search(w http.ResponseWriter, r *http.Request, t mediaf
 				return
 			}
 		}
+		// A fully downloaded show may have no release jobs. Still look for
+		// subtitles for the episodes this search covers.
+		if h.OnSubtitleSearch != nil {
+			scope := subtitles.ReleaseSearchScope{TitleID: t.ID, KeptOnly: true}
+			if in.VersionID != nil {
+				scope.VersionID = *in.VersionID
+			}
+			subtitleSearches = h.OnSubtitleSearch(ctx, scope)
+		}
 	}
-	webserver.WriteJSON(w, http.StatusAccepted, map[string]any{"job_ids": ids, "imports_again": len(retried)})
+	answer := map[string]any{"job_ids": ids, "imports_again": len(retried)}
+	if subtitleSearches > 0 {
+		answer["subtitle_searches"] = subtitleSearches
+	}
+	webserver.WriteJSON(w, http.StatusAccepted, answer)
 }
 
 // importFirst asks again for the import of the downloads the asked

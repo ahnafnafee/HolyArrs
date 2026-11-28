@@ -117,8 +117,10 @@
 		if (!o) return;
 		own.busyAction = key;
 		try {
-			const res = await api.post(`/titles/${o.id}/search`, body);
-			if (searchQueued(res)) toasts.push(done, 'info', { body: more.body, href: `/library/${o.id}${more.season != null ? `?season=${more.season}` : ''}` }); else toasts.push(t(nothingQueuedKey(!!o.keep_up_to_date)), 'info');
+			const res = await api.post<{ job_ids: number[]; subtitle_searches?: number }>(`/titles/${o.id}/search`, body);
+			if (res.subtitle_searches && !res.job_ids.length) toasts.push(t('discover.titleLibrary.searchingSubtitles'), 'info');
+			else if (searchQueued(res)) toasts.push(done, 'info', { body: more.body, href: `/library/${o.id}${more.season != null ? `?season=${more.season}` : ''}` });
+			else toasts.push(t(nothingQueuedKey(!!o.keep_up_to_date)), 'info');
 		} catch (e) {
 			toasts.push(t('discover.titleLibrary.couldntStartSearch'), 'fail', { body: message(e) });
 		} finally {

@@ -251,7 +251,7 @@
 		searching = key;
 		try {
 			if (list) body.choose = false;
-			const r = await api.post<{ job_ids: number[] }>(`/titles/${title.id}/search`, body);
+			const r = await api.post<{ job_ids: number[]; subtitle_searches?: number }>(`/titles/${title.id}/search`, body);
 			if (list) {
 				scope = list;
 				scopeJobs = r.job_ids;
@@ -261,6 +261,7 @@
 			}
 			if (r.job_ids.length) onStarted?.();
 			if (r.job_ids.length) toasts.push(done, 'info', { body: more.body, href: `/library/${title.id}${more.season != null ? `?season=${more.season}` : ''}` });
+			else if (r.subtitle_searches) toasts.push(t('discover.titleLibrary.searchingSubtitles'), 'info');
 			else toasts.push(t('shows.page.nothingToSearch'), 'ok');
 		} catch (e) {
 			toasts.push(t('shows.sheet.startSearchFailed'), 'fail', { body: message(e) });

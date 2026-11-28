@@ -82,7 +82,8 @@ func (a *handlers) Routes(rt *webserver.Router) {
 	}
 	lists.Routes(m)
 	retry := a.dl.Manager().RetryImportFirst
-	(&sources.TitleSearchHandlers{Store: a.s.Store, Queue: a.s.Queue, RetryImport: retry, Show: (&shows.SearchHandlers{Store: a.s.Store, Queue: a.s.Queue, RetryImport: retry}).Search, Artist: a.mh().SearchArtist}).Routes(m)
+	showSearch := &shows.SearchHandlers{Store: a.s.Store, Queue: a.s.Queue, RetryImport: retry, OnSubtitleSearch: a.s.Search.OnSubtitleSearch}
+	(&sources.TitleSearchHandlers{Store: a.s.Store, Queue: a.s.Queue, RetryImport: retry, Show: showSearch.Search, Artist: a.mh().SearchArtist}).Routes(m)
 	m.HandleFunc("GET /api/v1/downloads", downloads.ListDownloads(a.s.Store))
 	m.HandleFunc("GET /api/v1/imports", mediafiles.ListImports(a.s.Store))
 	m.HandleFunc("GET /api/v1/events", shows.ListEvents(a.s.Store))

@@ -62,8 +62,9 @@ export const nothingQueuedKey = (showKept: boolean) => (showKept ? 'shows.page.n
 
 /** A search answer with an empty job list started nothing; an answer without a list is taken as started. */
 export const searchQueued = (res: unknown) => {
-	const ids = (res as { job_ids?: unknown } | null | undefined)?.job_ids;
-	return ids === undefined || (Array.isArray(ids) && ids.length > 0);
+	const answer = res as { job_ids?: unknown; subtitle_searches?: number } | null | undefined;
+	const ids = answer?.job_ids;
+	return !!answer?.subtitle_searches || ids === undefined || (Array.isArray(ids) && ids.length > 0);
 };
 
 // Up to six language codes from a file's media info (a list or a slash-separated string).

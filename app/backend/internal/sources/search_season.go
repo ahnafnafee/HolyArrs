@@ -13,6 +13,7 @@ import (
 	"github.com/HolyArrs/holyarrs/app/backend/internal/core/jobs"
 	domain "github.com/HolyArrs/holyarrs/app/backend/internal/core/model"
 	"github.com/HolyArrs/holyarrs/app/backend/internal/mediafiles"
+	"github.com/HolyArrs/holyarrs/app/backend/internal/subtitles"
 )
 
 // showQuery is the search for one episode (daily: its air day; otherwise
@@ -145,6 +146,9 @@ func (s *Searcher) HandleSeason(ctx context.Context, r *jobs.Run) error {
 	// count. A season or episode searched by hand counts them all.
 	keptOnly, _ := r.Job.Params["kept_only"].(bool)
 	anyEp := hand && !keptOnly
+	if s.OnSubtitleSearch != nil {
+		s.OnSubtitleSearch(ctx, subtitles.ReleaseSearchScope{PartID: part.ID, VersionID: ver.ID, KeptOnly: !anyEp, DueOnly: !anyEp})
+	}
 	show := false
 	if v, ok := r.Job.Params["choose"].(bool); ok && !v {
 		show = true

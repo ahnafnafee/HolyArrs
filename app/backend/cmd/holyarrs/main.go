@@ -539,6 +539,12 @@ func serve(ctx context.Context, c config, o runOpts) error {
 	subs := &subtitles.Service{Store: s, Live: hub, Vault: vault}
 	subs.Register(q)
 	if !c.SafeMode {
+		sr.OnSubtitleSearch = func(ctx context.Context, scope subtitles.ReleaseSearchScope) int {
+			if !pc.On(parts.Subtitles) {
+				return 0
+			}
+			return subs.AfterReleaseSearch(ctx, scope)
+		}
 		s.OnEvent(func(e domain.Event) {
 			if pc.On(parts.Subtitles) {
 				subs.OnEvent(e)
