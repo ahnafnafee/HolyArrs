@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '#lib/core/i18n/i18n.svelte.ts';
+	import QuickHideButton from '#lib/discover/QuickHideButton.svelte';
 	// Hover card that grows out of a poster or tile and plays a trailer after a pause.
 	import IconButton from './IconButton.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
@@ -297,6 +298,7 @@
 			{#if href && stateIcon && owned}<IconButton class="state" icon={stateIcon} label={owned.label} variant="glass" size="lg" {href} />
 			{:else if href && !followTarget}<IconButton class="state" icon="arrow" label={t('ui.growCard.goTo', { title })} variant="glass" size="lg" {href} />{/if}
 			{#if followTarget}<button type="button" class="more bell" class:on={following} aria-pressed={following} aria-label="{followLabel(following)} {title}" title={bellHint} disabled={followBusy} onclick={flipFollow} data-testid="grow-follow"><Icon name={following ? 'bellOn' : 'bell'} size={18} /></button>{/if}
+			<QuickHideButton {kind} {tmdb} {title} onhidden={() => onclose()} />
 			{#if onmore}<button type="button" class="more info" aria-label={t('ui.growCard.moreInfoAbout', { title })} title={t('ui.growCard.moreInfo')} aria-haspopup="dialog" onclick={() => card && onmore(card.getBoundingClientRect())}><Icon name="chevronDown" size={20} /></button>
 			{:else if href}<a class="more info" {href} aria-label={t('ui.growCard.moreAbout', { title })} title={t('ui.growCard.moreInfo')}><Icon name="chevronDown" size={20} /></a>{/if}
 		</div>

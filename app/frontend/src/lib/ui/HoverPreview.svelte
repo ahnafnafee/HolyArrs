@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { t } from '#lib/core/i18n/i18n.svelte.ts';
+	import QuickHideButton from '#lib/discover/QuickHideButton.svelte';
 	// Small floating preview card shown on hover, with an optional trailer.
 	import TrailerPlayer from './TrailerPlayer.svelte';
 	import { metaLine } from './fresh.ts';
@@ -125,6 +126,7 @@
 				{#if line}<span class="s">{line}</span>{/if}
 			</div>
 			{#if action}<span class="act">{@render action()}</span>{/if}
+			<QuickHideButton {kind} {tmdb} {title} onhidden={onclose} />
 		</div>
 	</div>
 </div>

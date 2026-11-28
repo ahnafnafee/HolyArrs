@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { t } from '#lib/core/i18n/i18n.svelte.ts';
+	import { session } from '#lib/core/session.svelte.ts';
+	import { hiddenInCurrentView } from '#lib/discover/hidden.ts';
 	// Wide poster card with cover art, hover grow preview and badges.
 	import type { Snippet } from 'svelte';
 	import ArtPlaceholder from './ArtPlaceholder.svelte';
@@ -98,6 +100,7 @@
 	let tall = $state(false);
 	let cw = $state(0);
 	let loaded = $state(false);
+	const hidden = $derived(hiddenInCurrentView(session.s.id, preview));
 
 	const shownLogo = $derived(logoFailed ? null : sized(logo ?? null, 'poster') || null);
 	const tpl = $derived(cover ? cardTemplate(pick, { backdrop: image, logo: logo ?? null }, { art: pickFailed, logo: logoFailed }) : null);
@@ -192,7 +195,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="ui-wide" class:gone={needsArt && (!src || failed)} class:cover class:big class:grown={cover && open} style:width bind:this={root} onpointerenter={(e) => ((byKey = false), byArrow(e) ? opener.cancel() : enter())} onpointermove={(e) => (e.movementX || e.movementY) && !open && (byArrow(e) ? opener.cancel() : !opener.pending && ((byKey = false), enter()))} onpointerleave={leave} onfocusin={(e) => (e.target as HTMLElement)?.matches?.(':focus-visible') && ((byKey = true), enter())} onfocusout={(e) => !root?.contains(e.relatedTarget as Node) && leave()} onpointerdown={() => opener.cancel()}>
+<div class="ui-wide" class:gone={hidden || (needsArt && (!src || failed))} class:cover class:big class:grown={cover && open} style:width bind:this={root} onpointerenter={(e) => ((byKey = false), byArrow(e) ? opener.cancel() : enter())} onpointermove={(e) => (e.movementX || e.movementY) && !open && (byArrow(e) ? opener.cancel() : !opener.pending && ((byKey = false), enter()))} onpointerleave={leave} onfocusin={(e) => (e.target as HTMLElement)?.matches?.(':focus-visible') && ((byKey = true), enter())} onfocusout={(e) => !root?.contains(e.relatedTarget as Node) && leave()} onpointerdown={() => opener.cancel()}>
 	<svelte:element this={href ? 'a' : 'div'} class="hit" href={href} role={href ? undefined : 'group'} bind:this={hit} use:press={'card'} aria-label={cover ? [title, typedWord, sub, stripWords].filter(Boolean).join(', ') : undefined} title={cover ? title : undefined}>
 		<span class="art" class:low={badgesAt === 'bottom' && (badges.length || status)} use:viewTransitionName={vtName} bind:this={artEl}>
 			{#if !src || failed || !loaded}<ArtPlaceholder name={title} shape="wide" loading={!!src && !failed && near() && !loaded} />{/if}
@@ -232,9 +235,9 @@
 	<CardBadges fresh={strip} owned={owned ?? null} />
 {/snippet}
 
-{#if open && preview && cover && artEl}
+{#if open && !hidden && preview && cover && artEl}
 	<GrowCard anchor={artEl} kind={preview.kind} tmdb={preview.tmdb} year={preview.year} {title} {href} image={loaded && !failed ? art : null} logo={growLogo} lifted={!!strip} {leaving} badge={marked ? wideBadges : undefined} action={growAction} owned={owned ?? null} followId={preview.titleId} {followTmdb} context={growContext} service={growService} onmore={onmore ? (r) => { shut(); onmore(r); } : undefined} onenter={() => { closer.cancel(); leaving = false; }} onleave={leave} onclose={(back) => { shut(); if (back) { hit?.focus(); opener.cancel(); } }} focusIn={byKey} ontab={tabOut} returnTo={hit} ongone={() => leaving && shut()} />
-{:else if open && preview && root}
+{:else if open && !hidden && preview && root}
 	<HoverPreview anchor={root} kind={preview.kind} tmdb={preview.tmdb} year={preview.year} {title} {href} {image} badge={marked ? wideBadges : undefined} onenter={() => closer.cancel()} onleave={leave} onclose={shut} />
 {/if}
 

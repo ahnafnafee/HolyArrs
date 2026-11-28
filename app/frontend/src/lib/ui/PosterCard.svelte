@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { t } from '#lib/core/i18n/i18n.svelte.ts';
+	import { session } from '#lib/core/session.svelte.ts';
+	import { hiddenInCurrentView } from '#lib/discover/hidden.ts';
 	// Poster tile with art, badges, status and an optional hover preview card.
 	import type { Snippet } from 'svelte';
 	import Badge from './Badge.svelte';
@@ -114,7 +116,8 @@
 	const asking = $derived(!!image && !failed && near() && cw > 0);
 	const tint = $derived(color ?? pictureOf(pic)?.color ?? null);
 	const retryCover = $derived(albumCover && coverRetry < coverRetryDelays.length);
-	const gone = $derived(needsArt && (!image || (failed && !retryCover)));
+	const hidden = $derived(hiddenInCurrentView(session.s.id, preview));
+	const gone = $derived(hidden || (needsArt && (!image || (failed && !retryCover))));
 
 	$effect(() => {
 		void image;
@@ -242,13 +245,14 @@
 	<CardBadges fresh={strip} {owned} />
 {/snippet}
 
-{#if open && preview && artEl}
+{#if open && !hidden && preview && artEl}
 	<GrowCard anchor={artEl} kind={preview.kind} tmdb={preview.tmdb} year={preview.year} {title} {href} image={null} {leaving} badge={owned || strip ? ownBadge : undefined} action={growAction ?? action} owned={owned ?? null} followId={preview.titleId} {followTmdb} onenter={() => { closer.cancel(); leaving = false; }} onleave={leave} onclose={(back) => { shut(); if (back) { hit?.focus(); opener.cancel(); } }} focusIn={byKey} ontab={tabOut} returnTo={hit} ongone={() => leaving && shut()} />
 {/if}
 
 <style>
 	/* Hides the tile and its list item when art is required and missing. */
 	.ui-poster.gone, :global(li:has(> .ui-poster.gone)) { display: none; }
+	:global(li:has(> .ranked > .pc > .ui-poster.gone)) { display: none; }
 	.ui-poster { position: relative; min-width: 0; }
 	.hit { display: flex; flex-direction: column; gap: 2px; color: var(--text); border-radius: var(--r-card); }
 	.hit:focus-visible { outline: none; }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { addHide, hiddenPill, hideFor, hideLine, hideName, loadHides, showAgain, type Hide } from './hidden.ts';
+import { addHide, hiddenInCurrentView, hiddenPill, hideFor, hideLine, hideName, loadHides, quickHide, showAgain, type Hide } from './hidden.ts';
 
 const hide = (h: Partial<Hide>): Hide => ({ id: 1, kind: 'movie', user_id: 0, created_at: '2026-11-11T00:00:00Z', ...h });
 const people = new Map([[2, 'Sam']]);
@@ -38,5 +38,17 @@ describe('hidden from browsing', () => {
 		await showAgain(c as never, 7);
 		expect(c.del).toHaveBeenCalledWith('/hidden/7');
 		expect(c.freshBrowsing).toHaveBeenCalledTimes(2);
+	});
+
+	it('hides the card immediately for the current person and restores it on undo', async () => {
+		const title = { kind: 'show', tmdb: '777' } as const;
+		const c = { post: vi.fn(async () => hide({ id: 8, user_id: 2 })), del: vi.fn(async () => undefined), freshBrowsing: vi.fn() };
+		await quickHide(c as never, 2, title.kind, title.tmdb, 'Quiet Harbour');
+		expect(c.post).toHaveBeenCalledWith('/hidden', { kind: 'show', tmdb_id: '777', name: 'Quiet Harbour', user_id: 2 });
+		expect(hiddenInCurrentView(2, title)).toBe(true);
+		expect(hiddenInCurrentView(3, title)).toBe(false);
+		expect(hiddenInCurrentView(2, { ...title, kind: 'movie' })).toBe(false);
+		await showAgain(c as never, 8);
+		expect(hiddenInCurrentView(2, title)).toBe(false);
 	});
 });
